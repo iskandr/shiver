@@ -7,5 +7,8 @@ iteration space (i.e. a integer number of iterations, multiple integers, or even
 and shiver does all the messy plumbing of running your code in parallel. 
 
 Example:
+
+```python
    # fn takes three integers, the last two are index values
    shiver.run(fn, fixed_args=(GenericValue.int(1)), niters=[10, slice(start=2, stop=12, step = 2)])
+```
