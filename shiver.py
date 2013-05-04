@@ -1,11 +1,20 @@
+import math
+import multiprocessing
 import threading
+
 import llvm 
 import llvm.core 
+
+def savediv(x,y):
+  return int(math.ceil(x / float(y)))
+
+def cpu_count():
+  return multiprocessing.cpu_count()
 
 def parse_iter(x):
   if isinstance(x, int):
     s = slice(x)
-  elif isinstance(x, tuple):
+  elif isinstance(x, (list, tuple)):
     if len(x) == 1:
       s = slice(x[0])
     elif len(x) == 2:
@@ -20,26 +29,33 @@ def parse_iter(x):
     s.start = 0
   if s.step is None:
     s.step = 1
+  assert isinstance(s.start, int)
+  assert isinstance(s.stop, int)
+  assert isinstance(s.step, int)
+  assert s.stop > s.start 
   return s 
+
 
 def parse_iters(niters):
   if isinstance(niters, int):
     niters = (niters,)
-  assert isinstance(niters, tuple)
-  nvars = len(niters)
-  slices = []
-  totals = []
-  for x in niters:
-    s = parse_iter(x)
-    total = safediv(s.stop - s.start, s.step)
-    assert total > 0
-    slices.append(s)
-    totals.append(s)
-  return slices, totals
+  assert isinstance(niters, (list, tuple))
+  return [parse_iter(x) for x in niters]
+
+def split_iters(slices, n_pieces):
+  counts = [safediv(s.stop - s.start, s.step) for s in slices]
+  # total number of iterations across all variables
+  total = reduce(lambda x, y: x*y, counts)
+  n_pieces = min(10 * cpu_count(), total)
     
-def run(fn, niters, fixed_args = ()):
+# TODO: Make threads that call ee.run_function with fixed_args + (GenericValue.int(start), etc...) 
+def run(fn, niters, fixed_args = (), ee = None):
   assert isinstance(fn, llvm.core.Function)
-  slices, totals = parse_iters(niters)
+  slices = parse_iters(niters)
+  assert len(fn.args) == len(fixed_args) + len(slices)  
+  split_slices = split_iters(slices)   
+  if ee is None:
+    ee = llvm.ee.ExecutionEngine.new(fn.module)
   
      
     
