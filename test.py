@@ -2,13 +2,15 @@ import numpy as np
 
 import llvm 
 import llvm.core 
-import llvm.ee as ee 
+import llvm.ee  
+from llvm.ee import GenericValue 
 
 import shiver
 import llvm_helpers
 from llvm_helpers import  ty_int64,  ty_ptr_int64, empty_fn, ty_void, const 
 
 global_module = llvm.core.Module.new("global_module")
+ee = llvm.ee.ExecutionEngine.new(global_module)
 
 def mk_identity_fn():
   fn = empty_fn(global_module, "ident", (ty_int64,), ty_int64  )
@@ -25,8 +27,17 @@ def test_should_fail():
     assert False, "Shouldn't have accepted function with non-void return"
   except:
     pass 
-  
-def mk_add1():
+
+def test_add1_from_c():
+  src = "int add1(int x) { return x + 1;}"
+  add1 = llvm_helpers.from_c("add1", src);
+  x = 1
+  x_gv = GenericValue.int(ty_int64, x) 
+  res = ee.run_function(add1, [x_gv])
+  y = res.as_int()
+  assert (x+1) == y, "Expected %d but got %d" % (x+1,y)
+    
+def mk_add1_to_elt():
   fn = empty_fn(global_module, "add1", 
                 [("x", ty_ptr_int64), 
                  ("y", ty_ptr_int64),
@@ -44,14 +55,16 @@ def mk_add1():
   builder.ret_void()
   return fn 
   
-add1 = mk_add1()
+add1_to_elt = mk_add1_to_elt()
 
-def test_add1():
+"""
+def test_add1_arrays():
   x = np.array([1,2,3,4])
   y = x.copy()
-  x_ptr = ee.GenericValue.pointer(x.ctypes.data)
-  y_ptr = ee.GenericValue.pointer(y.ctypes.data)
-  shiver.parfor(add1, len(x), fixed_args= (x_ptr, y_ptr))
+  x_ptr = GenericValue.pointer(x.ctypes.data)
+  y_ptr = GenericValue.pointer(y.ctypes.data)
+  shiver.parfor(add1_to_elt, len(x), fixed_args= (x_ptr, y_ptr))
   expected = x + 1
   assert all(y.shape == expected.shape)
   assert all(y == expected)
+"""

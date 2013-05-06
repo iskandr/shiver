@@ -120,7 +120,9 @@ class LoopBuilder(object):
       body_builder = self._create(body_bb, body_builder, loop_vars + [var])
       body_builder.branch(test_bb)
       return after_builder 
-    
+
+  
+
 def empty_fn(module, name, input_types, output_type = ty_void):
   names = []
   types = []
@@ -137,3 +139,17 @@ def empty_fn(module, name, input_types, output_type = ty_void):
   for (i,arg) in enumerate(fn.args):
     arg.name = names[i]
   return fn  
+
+import subprocess 
+import tempfile
+def from_c(fn_name, src, compiler = 'clang'):
+  src_filename = tempfile.mktemp(prefix = fn_name + "_src_", suffix = '.c')
+  print src_filename
+  f = open(src_filename, 'w')
+  f.write(src + '\n')
+  f.close()
+  bitcode_filename = tempfile.mktemp(prefix = fn_name + "_bitcode_", suffix = '.o')
+  subprocess.check_call([compiler,  '-c', '-emit-llvm',  src_filename, '-o', bitcode_filename, ])
+  module = Module.from_bitcode(open(bitcode_filename))
+  return module.get_function_named(fn_name)
+
