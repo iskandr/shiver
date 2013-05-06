@@ -58,18 +58,18 @@ def return_type(fn):
   return fn.type.pointee.return_type 
 
 
-def int_const(x, t = ty_int64):
+def const_int(x, t = ty_int64):
   return Constant.int(t, x)
 
-def float_const(x, t = ty_float64):
+def const_float(x, t = ty_float64):
   return Constant.real(t, x)
 
 def const(x):
   if isinstance(x, int):
-    return int_const(x)
+    return const_int(x)
   else:
     assert isinstance(x, float)
-    return float_const(x)
+    return const_float(x)
 
 class LoopBuilder(object):
   def __init__(self, wrapper, original_fn, closure_values, 
@@ -101,24 +101,27 @@ class LoopBuilder(object):
     bb, builder = self.new_block("entry")
     return self._create(bb,builder)
   
-  def _create(self, bb, builder, loop_vars = []):
-    n = len(loop_vars)
+  def _create(self, bb, builder, loop_idx_values = []):
+    n = len(loop_idx_values)
     if n == self.n_loops:
-      loop_idx_values = [builder.load(var) for var in loop_vars]
       builder.call(self.original_fn, self.closure_values + loop_idx_values)
       return builder
     else:
-      var = builder.alloca(ty_int64, self.get_var_name(n))
-     
-      builder.store(self.start_values[n],var)
+      start = self.start_values[n]
+      stop = self.stop_values[n]
+      var = builder.alloca(start.type, self.get_var_name(n))
+  
+      builder.store(start, var)
       test_bb, test_builder =  self.new_block("test%d" % (n+1))
       builder.branch(test_bb)
       idx_value = test_builder.load(var)                         
-      cond = builder.icmp(ICMP_ULT, idx_value,self.stop_values[n], "stop_cond%d" % (n+1))
+      cond = builder.icmp(ICMP_ULT, idx_value, stop, "stop_cond%d" % (n+1))
       body_bb, body_builder = self.new_block("body%d" % (n+1))
       after_bb, after_builder = self.new_block("after_loop%d" % (n+1))
       test_builder.cbranch(cond, body_bb, after_bb)
-      body_builder = self._create(body_bb, body_builder, loop_vars + [var])
+      body_builder = self._create(body_bb, body_builder, loop_idx_values + [idx_value])
+      next_idx_value = body_builder.add(idx_value, const_int(1, idx_value.type))
+      body_builder.store(next_idx_value, var)
       body_builder.branch(test_bb)
       return after_builder 
 
@@ -162,27 +165,53 @@ def from_c(fn_name, src, compiler = 'clang', print_llvm = False):
     module = Module.from_bitcode(open(bitcode_filename))
   return module.get_function_named(fn_name)
 
-def from_python(x):
-  if isinstance(x, (int,long)):
-    return GenericValue.int(ty_int64, x)
+def is_llvm_float_type(t):
+  return t.kind in (llvm.core.TYPE_FLOAT, llvm.core.TYPE_DOUBLE)
+
+def is_llvm_int_type(t):
+  return t.kind == llvm.core.TYPE_INTEGER
+
+def is_llvm_ptr_type(t):
+  return t.kind == llvm.core.TYPE_POINTER
+
+def from_python(x, t = None):
+  if isinstance(x, GenericValue):
+    return x
+  elif isinstance(x, (int,long)):
+    t =  ty_int64 if t is None else t
+    assert is_llvm_int_type(t), \
+      "Expected LLVM integer type, not %s" % (t,) 
+    return GenericValue.int(t, x)
   elif isinstance(x, float):
-    pass 
+    t = ty_float64 if t is None else t
+    assert is_llvm_float_type(t), \
+        "Expected LLVM float type, not %s" % (t,)
+    return GenericValue.real(t, x)  
   elif isinstance(x, bool):
-    return GenericValue.int(ty_int8, x)
+    t = ty_int8 if t is None else t
+    assert is_llvm_int_type(t), \
+      "Expected LLVM integer type, not %s" % (t,)
+    return GenericValue.int(t, x)
   else:
-    assert isinstance(x, np.ndarray), \
-      "Don't know how to convert Python value of type %s" % (type(x),)
+    try:
+      x = np.asarray(x)
+    except: 
+      assert False, \
+          "Don't know how to convert Python value of type %s" % (type(x),)
+    assert t is None or is_llvm_ptr_type(t)
     return GenericValue.pointer(x.ctypes.data)
   
 
-def run(llvm_fn, *input_args, **kwds):
+def run(llvm_fn, *input_values, **kwds):
   """
   Given a compiled LLVM function and Python input values, 
   convert the input to LLVM generic values and run the 
   function 
   """
   ee = kwds.get('ee')
-  llvm_inputs = [from_python(x) for x in input_args]
+  llvm_inputs = [from_python(v, arg.type) 
+                 for (v,arg) in 
+                 zip(input_values, llvm_fn.args)]
   if ee is None:
     ee = ExecutionEngine.new(llvm_fn.module)
   return ee.run_function(llvm_fn, llvm_inputs)

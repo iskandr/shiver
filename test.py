@@ -66,9 +66,7 @@ add1_to_elt = mk_add1_to_elt()
 def test_add1_arrays():   
   x = np.array([1,2,3,4])
   y = x.copy()
-  x_ptr = GenericValue.pointer(x.ctypes.data)
-  y_ptr = GenericValue.pointer(y.ctypes.data)
-  shiver.parfor(add1_to_elt, len(x), fixed_args = (x_ptr, y_ptr), ee = ee)
+  shiver.parfor(add1_to_elt, len(x), fixed_args = (x, y), ee = ee)
   expected = x + 1
   assert all(y.shape == expected.shape)
   assert all(y == expected)

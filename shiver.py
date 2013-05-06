@@ -73,10 +73,14 @@ def mk_wrapper(fn, step_sizes):
   # need to double the integer index inputs to allow for a stop argument 
   # of each   the number of index inputs to
   old_input_types = [arg.type for arg in fn.args]
-  extra_input_types = [ty_int64 for _ in xrange(n_indices)]
-  new_input_types = old_input_types + extra_input_types
+  new_input_types = [t for t in old_input_types]
+  for i in xrange(n_indices):
+    old_index_type = old_input_types[-n_indices + i]
+    assert old_index_type.kind == TYPE_INTEGER, \
+        "Last %d input(s) to %s must be integers" % (n_indices, fn.name)
+    new_input_types.append(old_index_type)
   wrapper = empty_fn(fn.module, fn.name + "_wrapper",  new_input_types)
-  
+  print wrapper 
   for arg_idx in xrange(len(new_input_types)):
     if arg_idx < len(old_input_types):
       wrapper.args[arg_idx].name = fn.args[arg_idx].name 
@@ -128,7 +132,12 @@ def parfor(fn, niters, fixed_args = (), ee = None):
   assert isinstance(fn, Function), \
     "Can only run LLVM functions, not %s" % type(fn)
   assert return_type(fn) == ty_void, \
-    "Body of parfor loop must return void, not %s" % return_type(fn) 
+    "Body of parfor loop must return void, not %s" % return_type(fn)
+  
+  # in case fixed arguments aren't yet GenericValues, convert them
+  fixed_args = tuple(from_python(v, arg.type) 
+                     for (v,arg) in 
+                     zip(fixed_args, fn.args))
   iter_ranges = parse_iters(niters)
   n_fixed = len(fixed_args)
   n_indices = len(iter_ranges)
