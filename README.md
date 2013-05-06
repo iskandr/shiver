@@ -41,7 +41,7 @@ FAQ
 
 *Can I use this library to run Python code in parallel?* 
     
-Sorry, no. Shiver is only useful if you're already compiling [LLVM](http://www.drdobbs.com/architecture-and-design/the-design-of-llvm/240001128) code using [llvmpy](http://www.llvmpy.org/) or if you want to use shiver's *from_c* helper to compile simple C functions. Shiver takes a compiled function which constitutes the body of a loop (or a nesting of loops) and runs that code in parallel. It uses the Python threading API to split up your work and saves from having to deal with [pthreads](http://www.cs.fsu.edu/~baker/realtime/restricted/notes/pthreads.html). 
+Sorry, no. Shiver is only useful if you're already compiling [LLVM](http://www.drdobbs.com/architecture-and-design/the-design-of-llvm/240001128) code using [llvmpy](http://www.llvmpy.org/) or if you want to use shiver's *from_c* helper to compile simple C functions. Shiver takes an LLVM function which constitutes the body of a loop (or a nesting of loops) and runs that code in parallel. It uses the Python threading API to split up your work and saves you from having to deal with [pthreads](http://www.cs.fsu.edu/~baker/realtime/restricted/notes/pthreads.html). 
 
 
 *You're using Python threads, doesn't that mean you're still stuck behind the [GIL](http://stackoverflow.com/questions/1294382/what-is-a-global-interpreter-lock-gil)?*
