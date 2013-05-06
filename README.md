@@ -29,7 +29,9 @@ Example:
    src = "void int(long* x, long i, long j) { x[(j-1)*5 + i-1] = i*j;}" 
    fn_two_idxs = shiver.from_c(src)
 
-   # notice that we're passing in 
+   # notice that we're passing in slices instead of just an integer; 
+   # they're not actually being used to slice into an array but rather 
+   # to indicate the start/stop/step values of the parallel loop nests
    shiver.parfor(fn_two_idxs, niters = (slice(1,6), slice(1,3)), fixed_args =[x])
 ```
 
