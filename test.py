@@ -27,7 +27,12 @@ def test_should_fail():
     pass 
   
 def mk_add1():
-  fn = empty_fn(global_module, "add1", [ty_ptr_int64, ty_ptr_int64, ty_int64], ty_void)
+  fn = empty_fn(global_module, "add1", 
+                [("x", ty_ptr_int64), 
+                 ("y", ty_ptr_int64),
+                 ("i", ty_int64)
+                ], 
+                ty_void)
   bb = fn.append_basic_block("entry")
   builder = llvm.core.Builder.new(bb)
   x, y, i = fn.args 

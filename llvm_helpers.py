@@ -103,7 +103,8 @@ class LoopBuilder(object):
   def _create(self, bb, builder, loop_vars = []):
     n = len(loop_vars)
     if n == self.n_loops:
-      builder.call(self.original_fn, self.closure_values + loop_vars)
+      loop_idx_values = [builder.load(var) for var in loop_vars]
+      builder.call(self.original_fn, self.closure_values + loop_idx_values)
       return builder
     else:
       var = builder.alloca(ty_int64, self.get_var_name(n))
@@ -111,46 +112,28 @@ class LoopBuilder(object):
       builder.store(self.start_values[n],var)
       test_bb, test_builder =  self.new_block("test%d" % (n+1))
       builder.branch(test_bb)
-      idx_value = test_bb.load(var)                         
+      idx_value = test_builder.load(var)                         
       cond = builder.icmp(ICMP_ULT, idx_value,self.stop_values[n], "stop_cond%d" % (n+1))
       body_bb, body_builder = self.new_block("body%d" % (n+1))
       after_bb, after_builder = self.new_block("after_loop%d" % (n+1))
       test_builder.cbranch(cond, body_bb, after_bb)
-      body_builder = self.create(body_bb, body_builder, loop_vars + [var])
-      body_builder.branch(test_builder)
+      body_builder = self._create(body_bb, body_builder, loop_vars + [var])
+      body_builder.branch(test_bb)
       return after_builder 
     
 def empty_fn(module, name, input_types, output_type = ty_void):
-  ty_func = Type.function(output_type, input_types)
-  return module.add_function(ty_func, name)  
-
-def mk_wrapper(fn, step_sizes):
-  n_indices = len(step_sizes)
-
-  # need to double the integer index inputs to allow for a stop argument 
-  # of each   the number of index inputs to
-  old_input_types = [arg.type for arg in fn.args]
-  extra_input_types = [ty_int64 for _ in xrange(n_indices)]
-  new_input_types = old_input_types + extra_input_types
-  wrapper = empty_fn(fn.module, fn.name + "_wrapper",  new_input_types)
-  
-  for arg_idx in xrange(len(new_input_types)):
-    if arg_idx < len(old_input_types):
-      wrapper.args[arg_idx].name = fn.args[arg_idx].name 
+  names = []
+  types = []
+  for (i, item) in enumerate(input_types):
+    if isinstance(item, (list, tuple)):
+      names.append(item[0])
+      types.append(item[1])
     else:
-      wrapper.args[arg_idx].name = fn.args[arg_idx - n_indices].name + "_stop"
-  index_vars = wrapper.args[-2*n_indices:]
-  closure_vars = wrapper.args[:-2*n_indices]
-  start_vars = index_vars[:n_indices]
-  stop_vars = index_vars[n_indices:]
+      names.append("arg%d" % (i+1))
+      types.append(item)
   
-  assert len(start_vars) == len(stop_vars)
-  loop_builder = LoopBuilder(wrapper, 
-                             fn, 
-                             closure_vars, 
-                             start_vars, 
-                             stop_vars, 
-                             step_sizes)
-  exit_builder = loop_builder.create()
-  exit_builder.ret()
-  return wrapper 
+  ty_func = Type.function(output_type, types)
+  fn = module.add_function(ty_func, name)
+  for (i,arg) in enumerate(fn.args):
+    arg.name = names[i]
+  return fn  
