@@ -55,18 +55,41 @@ def parse_iters(niters):
   assert isinstance(niters, (list, tuple))
   return [parse_iter_range(x) for x in niters]
 
+def smallest_divisor(n):
+  for i in xrange(2,n):
+    if n % i == 0:
+      return i 
+  return n 
+
+
 def split_iters(iter_ranges, n_threads = None):
+  """
+  For now, we just pick the biggest dimension and split 
+  it into min(dimsize, 10*n_cores pieces)
+  """
   if n_threads is None:
     n_threads = cpu_count()
   
   counts = [safediv(r[1] - r[0], r[2]) for r in iter_ranges]
-  # total number of iterations across all variables
-  total = reduce(lambda x, y: x*y, counts)
-  n_pieces = min(10 * n_threads, total)
-  divisors = []
-  for dim_count in counts:
-    assert False
-    
+
+  biggest_dim = np.argmax(counts)
+  dimsize = counts[biggest_dim]
+  n_pieces = min(10*n_threads, dimsize)
+  factor = float(dimsize) / n_pieces
+  pieces = []
+  r = iter_ranges[biggest_dim]
+  total_start = r[0]
+
+  total_step = r[2]
+  for i in xrange(n_pieces):
+    # copy all the var ranges, after which we'll modifying 
+    # the biggest dimension 
+    piece = [r for r in iter_ranges]
+    start = total_start + int(math.floor(total_step * factor * i))
+    stop = total_start + int(math.floor(total_step * factor * (i+1))) 
+    piece[biggest_dim] = (start,stop,total_step)
+    pieces.append(piece)
+  return pieces   
   
           
 
@@ -112,17 +135,19 @@ class Worker(threading.Thread):
     self.q = q 
     self.ee = ee 
     self.work_fn = work_fn
+
     self.fixed_args = list(fixed_args)
     threading.Thread.__init__(self)
 
+  
   
   def run(self):
     while True:
       try:
         ranges = self.q.get(False)
         # TODO: have to make these types actually match the expected input size
-        starts = [self.const_int(r[0]) for r in ranges]
-        stops = [self.const_int(r[1]) for r in ranges]
+        starts = [from_python(r[0]) for r in ranges]
+        stops = [from_python(r[1]) for r in ranges]
         self.ee.run_function(self.work_fn, self.fixed_args + starts + stops)
         self.q.task_done()
       except Queue.Empty:
@@ -153,6 +178,7 @@ def parfor(fn, niters, fixed_args = (), ee = None):
   # put all the index ranges into the queue
   for work_item in split_iters(iter_ranges):
     q.put(work_item)
+  print work_fn 
   # start worker threads
   for _ in xrange(cpu_count()):
     Worker(q, ee, work_fn, fixed_args).start()

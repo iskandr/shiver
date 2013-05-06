@@ -38,38 +38,20 @@ def test_add1_from_c():
   assert (x+1) == y, "Expected %d but got %d" % (x+1,y)
 
 
-"""
 def mk_add1_to_elt():
-  fn = empty_fn(global_module, "add1", 
-                [("x", ty_ptr_int64), 
-                 ("y", ty_ptr_int64),
-                 ("i", ty_int64)
-                ], 
-                ty_void)
-  bb = fn.append_basic_block("entry")
-  builder = llvm.core.Builder.new(bb)
-  x, y, i = fn.args 
-  input_ptr = builder.gep(x, [i])
-  input_elt = builder.load(input_ptr)
-  output_elt = builder.add(input_elt,  const(1))
-  output_ptr = builder.gep(y, [i])
-  builder.store(output_elt, output_ptr)
-  builder.ret_void()
-  return fn 
-"""
-def mk_add1_to_elt():
-  src = "void add1_to_elt(int* x, int* y, int i) { y[i] = x[i] + 1; }"
+  src = "void add1_to_elt(long* x, long* y, long i) { y[i] = x[i] + 1; }"
   return llvm_helpers.from_c("add1_to_elt", src, print_llvm = True)
 
 add1_to_elt = mk_add1_to_elt()
 
-def test_add1_arrays():   
-  x = np.array([1,2,3,4])
-  y = x.copy()
-  shiver.parfor(add1_to_elt, len(x), fixed_args = (x, y), ee = ee)
+def test_add1_arrays():
+  n = 12    
+  x = np.arange(n)
+  y = np.empty(n, dtype=x.dtype)
+  shiver.parfor(add1_to_elt, n, fixed_args = (x, y), ee = ee)
   expected = x + 1
-  assert all(y.shape == expected.shape)
-  assert all(y == expected)
+  assert y.shape == expected.shape
+  assert all(y == expected), "Expected %s but got %s" % (expected, y)
 
 if __name__ == '__main__':
   testing_helpers.run_local_tests()

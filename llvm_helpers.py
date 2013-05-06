@@ -115,7 +115,7 @@ class LoopBuilder(object):
       test_bb, test_builder =  self.new_block("test%d" % (n+1))
       builder.branch(test_bb)
       idx_value = test_builder.load(var)                         
-      cond = builder.icmp(ICMP_ULT, idx_value, stop, "stop_cond%d" % (n+1))
+      cond = test_builder.icmp(ICMP_ULT, idx_value, stop, "stop_cond%d" % (n+1))
       body_bb, body_builder = self.new_block("body%d" % (n+1))
       after_bb, after_builder = self.new_block("after_loop%d" % (n+1))
       test_builder.cbranch(cond, body_bb, after_bb)
