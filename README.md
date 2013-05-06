@@ -30,9 +30,9 @@ FAQ
 
 *Can I use this library to run Python code in parallel?* 
     
-    Sorry, no. Shiver is only useful if you're already compiling [LLVM](http://www.drdobbs.com/architecture-and-design/the-design-of-llvm/240001128) code using [llvmpy](http://www.llvmpy.org/). Shiver takes a compiled function which constitutes the body of a loop (or a nesting of loops) and runs that code in parallel. It uses the Python threading API to split up your work and saves from having to deal with [pthreads](http://www.cs.fsu.edu/~baker/realtime/restricted/notes/pthreads.html). 
+Sorry, no. Shiver is only useful if you're already compiling [LLVM](http://www.drdobbs.com/architecture-and-design/the-design-of-llvm/240001128) code using [llvmpy](http://www.llvmpy.org/). Shiver takes a compiled function which constitutes the body of a loop (or a nesting of loops) and runs that code in parallel. It uses the Python threading API to split up your work and saves from having to deal with [pthreads](http://www.cs.fsu.edu/~baker/realtime/restricted/notes/pthreads.html). 
 
 
 *You're using Python threads, doesn't that mean you're still stuck behind the [GIL](http://stackoverflow.com/questions/1294382/what-is-a-global-interpreter-lock-gil)?*
 
-     When Shiver calls into native code (using [ExecutionEngine.run_function](http://sourcecodebrowser.com/llvm-py/0.5plus-psvn85/classllvm_1_1ee_1_1_execution_engine.html#a4da1e185faa9926638751f2bde570ad2)), it releases the Global Interpreter Lock, allowing its threads to actually utilize all of your processors. 
+When Shiver calls into native code (using [ExecutionEngine.run_function](http://sourcecodebrowser.com/llvm-py/0.5plus-psvn85/classllvm_1_1ee_1_1_execution_engine.html#a4da1e185faa9926638751f2bde570ad2)), it releases the Global Interpreter Lock, allowing its threads to actually utilize all of your processors. 
