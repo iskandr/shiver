@@ -6,7 +6,8 @@ import threading
 from llvm import *
 from llvm.core import * 
 
-ty_int = Type.int(64) 
+from llvm_helpers import * 
+
 
 def safediv(x,y):
   return int(math.ceil(x / float(y)))
@@ -91,7 +92,7 @@ class LoopBuilder(object):
       builder.call(self.original_fn, self.closure_values + loop_vars)
       return builder
     else:
-      var = builder.alloca(ty_int, self.get_var_name(n))
+      var = builder.alloca(ty_int64, self.get_var_name(n))
      
       builder.store(self.start_values[n],var)
       test_bb, test_builder =  self.new_block("test%d" % (n+1))
@@ -113,7 +114,7 @@ def mk_wrapper(fn, step_sizes):
   # need to double the integer index inputs to allow for a stop argument 
   # of each   the number of index inputs to
   old_input_types = [arg.type for arg in fn.args]
-  extra_input_types = [ty_int for _ in xrange(n_indices)]
+  extra_input_types = [ty_int64 for _ in xrange(n_indices)]
   new_input_types = old_input_types + extra_input_types
   ty_func = Type.function(return_type(fn), new_input_types)
   new_name = fn.name + "_wrapper" 
@@ -148,7 +149,7 @@ class Worker(threading.Thread):
     threading.Thread.__init__(self)
   
   def gv_int(self, x):
-    return self.ee.GenericValue.int(ty_int, x) 
+    return self.ee.GenericValue.int(ty_int64, x) 
   
   def run(self):
     while True:
