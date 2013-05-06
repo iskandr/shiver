@@ -21,7 +21,8 @@ Example:
    
    # let's do the same thing again, but here we'll explicitly convert the 
    # fixed array argument to a type LLVM understands 
-   shiver.parfor(fn_one_idx, niters=len(x), fixed_args = [GenericValue.pointer(x.ctypes.data)])
+   x_gv = GenericValue.pointer(x.ctypes.data)
+   shiver.parfor(fn_one_idx, niters=len(x), fixed_args = [x_gv])
    
    # Now we'll build a function which takes two indices which range 
    # over all pairs of integers [1..5] and [1..2] and fills x with their products
