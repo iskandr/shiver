@@ -81,7 +81,7 @@ class Worker(threading.Thread):
 def parfor(fn, niters, fixed_args = (), ee = None):
   assert isinstance(fn, Function), \
     "Can only run LLVM functions, not %s" % type(fn)
-  assert return_type(fn) == Type.void, \
+  assert return_type(fn) == ty_void, \
     "Body of parfor loop must return void, not %s" % return_type(fn) 
   slices = parse_iters(niters)
   n_fixed = len(fixed_args)
