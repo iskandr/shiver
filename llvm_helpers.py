@@ -57,6 +57,18 @@ def return_type(fn):
   return fn.type.pointee.return_type 
 
 
+def int_const(x, t = ty_int64):
+  return Constant.int(t, x)
+
+def float_const(x, t = ty_float64):
+  return Constant.real(t, x)
+
+def const(x):
+  if isinstance(x, int):
+    return int_const(x)
+  else:
+    assert isinstance(x, float)
+    return float_const(x)
 
 class LoopBuilder(object):
   def __init__(self, wrapper, original_fn, closure_values, 

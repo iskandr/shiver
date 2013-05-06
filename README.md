@@ -1,5 +1,6 @@
 shiver
 ======
+*a shiver of sharks, biting and tearing, until all is consumed*
 
 A multi-threaded work queue for functions compiled with [llvmpy](http://http://www.llvmpy.org/). 
 Give *shiver* a function whose last argument is an index (or multiple indices) and a description of the 
