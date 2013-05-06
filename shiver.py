@@ -56,8 +56,9 @@ def return_type(fn):
 
 
 class LoopBuilder(object):
-  def __init__(self, original_fn, closure_values, 
+  def __init__(self, wrapper, original_fn, closure_values, 
                start_values, stop_values, step_constants):
+    self.wrapper = wrapper 
     self.original_fn = original_fn 
     self.closure_values = closure_values 
     self.start_values = start_values 
@@ -68,17 +69,42 @@ class LoopBuilder(object):
     assert len(step_constants) == self.n_loops 
     n_args = len(original_fn.args)
     assert len(closure_values) + self.n_loops == n_args
-    
-  def create(self, bb, builder, loop_vars = []):
+  
+  _loop_var_names = ['i', 'j', 'k', 'l']
+  
+  def new_block(self, name):
+    bb = self.wrapper.append_basic_block(name)
+    builder = Builder.new(bb)
+    return bb, builder
+  
+  def get_var_name(self, pos):
+    maxpos = len(self._loop_var_names)
+    return self._loop_var_names[pos % maxpos] * ((pos/maxpos)+1)
+  
+  def create(self):
+    bb, builder = self.new_block("entry")
+    return self._create(bb,builder)
+  
+  def _create(self, bb, builder, loop_vars = []):
     n = len(loop_vars)
     if n == self.n_loops:
       builder.call(self.original_fn, self.closure_values + loop_vars)
-      return bb 
+      return builder
     else:
-      next_bb = None
-      idx_var = None
-      self.create(next_bb, builder, loop_vars + [idx_var] )
-  
+      var = builder.alloca(ty_int, self.get_var_name(n))
+     
+      builder.store(self.start_values[n],var)
+      test_bb, test_builder =  self.new_block("test%d" % (n+1))
+      builder.branch(test_bb)
+      idx_value = test_bb.load(var)                         
+      cond = builder.icmp(ICMP_ULT, idx_value,self.stop_values[n], "stop_cond%d" % (n+1))
+      body_bb, body_builder = self.new_block("body%d" % (n+1))
+      after_bb, after_builder = self.new_block("after_loop%d" % (n+1))
+      test_builder.cbranch(cond, body_bb, after_bb)
+      body_builder = self.create(body_bb, body_builder, loop_vars + [var])
+      body_builder.branch(test_builder)
+      return after_builder 
+    
           
 
 def mk_wrapper(fn, step_sizes):
@@ -97,23 +123,20 @@ def mk_wrapper(fn, step_sizes):
       wrapper.args[arg_idx].name = fn.args[arg_idx].name 
     else:
       wrapper.args[arg_idx].name = fn.args[arg_idx - n_indices].name + "_stop"
-  # TODO: create builder, make n_indices loops in the body
   index_vars = wrapper.args[-2*n_indices:]
   closure_vars = wrapper.args[:-2*n_indices]
   start_vars = index_vars[:n_indices]
   stop_vars = index_vars[n_indices:]
   
   assert len(start_vars) == len(stop_vars)
-  loop_builder = LoopBuilder(fn, 
+  loop_builder = LoopBuilder(wrapper, 
+                             fn, 
                              closure_vars, 
                              start_vars, 
                              stop_vars, 
                              step_sizes)
-  entry_bb = wrapper.append_basic_block("entry")
-  builder = Builder.new(entry_bb)
-  exit_bb, exit_builder = loop_builder.create(entry_bb, builder)
+  exit_builder = loop_builder.create()
   exit_builder.ret()
-  # how to tie the exit bb in to the loop?
   return wrapper 
 
 class Worker(threading.Thread):
