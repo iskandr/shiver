@@ -10,18 +10,26 @@ and shiver does all the messy plumbing of running your code in parallel.
 Example:
 
 ```python
-   # call a simple function that takes an index as its only input
-   shiver.parfor(fn_simple, niters=10)
+   # we're going to fill this array with the numbers [0...9]
+   x = np.empty(10, dtype=int)
+   # compile an LLVM function which takes a data point, and an index
+   fn_one_idx = shiver.from_c("void int(long *x, long i) { x[i] = i;}")   
+   # run fn_one_idx in parallel;
+   # - shiver will supply x's data pointer as a fixed argument to all threads 
+   # - each worker thread will also get a subrange of the indices [0..9]
+   shiver.parfor(fn_one_idx, niters=len(x), fixed_args = [x])
    
-   # call a function which takes two integers with all pairs 
-   # of even integers [2..10] and [10..40]
-   shiver.parfor(fn_two_inputs, niters = (slice(2,11,2), slice(10,40,2)))
+   # let's do the same thing again, but here we'll explicitly convert the 
+   # fixed array argument to a type LLVM understands 
+   shiver.parfor(fn_one_idx, niters=len(x), fixed_args = [GenericValue.pointer(x.ctypes.data)])
+   
+   # Now we'll build a function which takes two indices which range 
+   # over all pairs of integers [1..5] and [1..2] and fills x with their products
+   src = "void int(long* x, long i, long j) { x[(j-1)*5 + i-1] = i*j;}" 
+   fn_two_idxs = shiver.from_c(src)
 
-   # more complex function which takes first two fixed array arguments and then
-   # a varying integer index which will take values 30,33,36,39, etc... 
-   x_gv = GenericValue.pointer(x.ctypes.data)
-   y_gv = GenericValue.pointer(y.ctypes.data)
-   shiver.parfor(fn_three_inputs, fixed_args=[x_gv, y_gv], niters=slice(30,140,3))
+   # notice that we're passing in 
+   shiver.parfor(fn_two_idxs, niters = (slice(1,6), slice(1,3)), fixed_args =[x])
 ```
 
 

@@ -120,7 +120,8 @@ class LoopBuilder(object):
       after_bb, after_builder = self.new_block("after_loop%d" % (n+1))
       test_builder.cbranch(cond, body_bb, after_bb)
       body_builder = self._create(body_bb, body_builder, loop_idx_values + [idx_value])
-      next_idx_value = body_builder.add(idx_value, const_int(1, idx_value.type))
+      step = const_int(self.step_constants[n], idx_value.type)
+      next_idx_value = body_builder.add(idx_value, step)
       body_builder.store(next_idx_value, var)
       body_builder.branch(test_bb)
       return after_builder 
@@ -148,7 +149,7 @@ import subprocess
 import tempfile
 def from_c(fn_name, src, compiler = 'clang', print_llvm = False):
   src_filename = tempfile.mktemp(prefix = fn_name + "_src_", suffix = '.c')
-  print src_filename
+
   f = open(src_filename, 'w')
   f.write(src + '\n')
   f.close()

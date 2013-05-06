@@ -63,7 +63,10 @@ def split_iters(iter_ranges, n_threads = None):
   # total number of iterations across all variables
   total = reduce(lambda x, y: x*y, counts)
   n_pieces = min(10 * n_threads, total)
-  assert False
+  divisors = []
+  for dim_count in counts:
+    
+  
           
 
 
@@ -80,7 +83,7 @@ def mk_wrapper(fn, step_sizes):
         "Last %d input(s) to %s must be integers" % (n_indices, fn.name)
     new_input_types.append(old_index_type)
   wrapper = empty_fn(fn.module, fn.name + "_wrapper",  new_input_types)
-  print wrapper 
+
   for arg_idx in xrange(len(new_input_types)):
     if arg_idx < len(old_input_types):
       wrapper.args[arg_idx].name = fn.args[arg_idx].name 
@@ -100,7 +103,7 @@ def mk_wrapper(fn, step_sizes):
                              step_sizes)
   exit_builder = loop_builder.create()
   exit_builder.ret_void()
-  print wrapper
+
   return wrapper 
 
 class Worker(threading.Thread):
