@@ -2,7 +2,8 @@ import numpy as np
 
 
 from llvm import * 
-from llvm.core import * 
+from llvm.core import *
+from llvm.ee import GenericValue, ExecutionEngine 
 
 ty_void = Type.void()
 ty_int8 = Type.int(8)
@@ -142,14 +143,46 @@ def empty_fn(module, name, input_types, output_type = ty_void):
 
 import subprocess 
 import tempfile
-def from_c(fn_name, src, compiler = 'clang'):
+def from_c(fn_name, src, compiler = 'clang', print_llvm = False):
   src_filename = tempfile.mktemp(prefix = fn_name + "_src_", suffix = '.c')
   print src_filename
   f = open(src_filename, 'w')
   f.write(src + '\n')
   f.close()
-  bitcode_filename = tempfile.mktemp(prefix = fn_name + "_bitcode_", suffix = '.o')
-  subprocess.check_call([compiler,  '-c', '-emit-llvm',  src_filename, '-o', bitcode_filename, ])
-  module = Module.from_bitcode(open(bitcode_filename))
+  if print_llvm:
+    assembly_filename = tempfile.mktemp(prefix = fn_name + "_llcode_", suffix = '.s')
+    subprocess.check_call([compiler,  '-c', '-emit-llvm', '-S',  src_filename, '-o', assembly_filename, ])
+    llvm_source = open(assembly_filename).read()
+    print llvm_source
+    module = Module.from_assembly(llvm_source)
+    
+  else: 
+    bitcode_filename = tempfile.mktemp(prefix = fn_name + "_bitcode_", suffix = '.o')
+    subprocess.check_call([compiler,  '-c', '-emit-llvm',  src_filename, '-o', bitcode_filename, ])
+    module = Module.from_bitcode(open(bitcode_filename))
   return module.get_function_named(fn_name)
 
+def from_python(x):
+  if isinstance(x, (int,long)):
+    return GenericValue.int(ty_int64, x)
+  elif isinstance(x, float):
+    pass 
+  elif isinstance(x, bool):
+    return GenericValue.int(ty_int8, x)
+  else:
+    assert isinstance(x, np.ndarray), \
+      "Don't know how to convert Python value of type %s" % (type(x),)
+    return GenericValue.pointer(x.ctypes.data)
+  
+
+def run(llvm_fn, *input_args, **kwds):
+  """
+  Given a compiled LLVM function and Python input values, 
+  convert the input to LLVM generic values and run the 
+  function 
+  """
+  ee = kwds.get('ee')
+  llvm_inputs = [from_python(x) for x in input_args]
+  if ee is None:
+    ee = ExecutionEngine.new(llvm_fn.module)
+  return ee.run_function(llvm_fn, llvm_inputs)

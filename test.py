@@ -6,6 +6,7 @@ import llvm.ee
 from llvm.ee import GenericValue 
 
 import shiver
+import testing_helpers 
 import llvm_helpers
 from llvm_helpers import  ty_int64,  ty_ptr_int64, empty_fn, ty_void, const 
 
@@ -32,11 +33,12 @@ def test_add1_from_c():
   src = "int add1(int x) { return x + 1;}"
   add1 = llvm_helpers.from_c("add1", src);
   x = 1
-  x_gv = GenericValue.int(ty_int64, x) 
-  res = ee.run_function(add1, [x_gv])
+  res = llvm_helpers.run(add1, x)
   y = res.as_int()
   assert (x+1) == y, "Expected %d but got %d" % (x+1,y)
-    
+
+
+"""
 def mk_add1_to_elt():
   fn = empty_fn(global_module, "add1", 
                 [("x", ty_ptr_int64), 
@@ -54,17 +56,22 @@ def mk_add1_to_elt():
   builder.store(output_elt, output_ptr)
   builder.ret_void()
   return fn 
-  
+"""
+def mk_add1_to_elt():
+  src = "void add1_to_elt(int* x, int* y, int i) { y[i] = x[i] + 1; }"
+  return llvm_helpers.from_c("add1_to_elt", src, print_llvm = True)
+
 add1_to_elt = mk_add1_to_elt()
 
-"""
-def test_add1_arrays():
+def test_add1_arrays():   
   x = np.array([1,2,3,4])
   y = x.copy()
   x_ptr = GenericValue.pointer(x.ctypes.data)
   y_ptr = GenericValue.pointer(y.ctypes.data)
-  shiver.parfor(add1_to_elt, len(x), fixed_args= (x_ptr, y_ptr))
+  shiver.parfor(add1_to_elt, len(x), fixed_args = (x_ptr, y_ptr), ee = ee)
   expected = x + 1
   assert all(y.shape == expected.shape)
   assert all(y == expected)
-"""
+
+if __name__ == '__main__':
+  testing_helpers.run_local_tests()
