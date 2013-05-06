@@ -65,6 +65,7 @@ def split_iters(iter_ranges, n_threads = None):
   n_pieces = min(10 * n_threads, total)
   divisors = []
   for dim_count in counts:
+    assert False
     
   
           
@@ -113,17 +114,15 @@ class Worker(threading.Thread):
     self.work_fn = work_fn
     self.fixed_args = list(fixed_args)
     threading.Thread.__init__(self)
-  
-  def gv_int(self, x):
-    return self.ee.GenericValue.int(ty_int64, x) 
+
   
   def run(self):
     while True:
       try:
         ranges = self.q.get(False)
-        
-        starts = [self.gv_int(r[0]) for r in ranges]
-        stops = [self.gv_int(r[1]) for r in ranges]
+        # TODO: have to make these types actually match the expected input size
+        starts = [self.const_int(r[0]) for r in ranges]
+        stops = [self.const_int(r[1]) for r in ranges]
         self.ee.run_function(self.work_fn, self.fixed_args + starts + stops)
         self.q.task_done()
       except Queue.Empty:
