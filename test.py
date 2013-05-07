@@ -39,16 +39,16 @@ def test_add1_from_c():
 
 
 def mk_add1_to_elt():
-  src = "void add1_to_elt(int* x, int* y, long i) { y[i] = x[i] + 1; }"
-  return llvm_helpers.from_c("add1_to_elt", src, print_llvm = True)
+  src = "void add1_to_elt_int32(int* x, int* y, long i) { y[i] = x[i] + 1; }"
+  return llvm_helpers.from_c("add1_to_elt_int32", src, print_llvm = False)
 
-add1_to_elt = mk_add1_to_elt()
+add1_to_elt_int32 = mk_add1_to_elt()
 
 def test_add1_arrays():
   n = 12    
   x = np.arange(n, dtype= np.int32)
   y = np.empty_like(x)
-  shiver.parfor(add1_to_elt, n, fixed_args = (x, y), ee = ee)
+  shiver.parfor(add1_to_elt_int32, n, fixed_args = (x, y), ee = ee)
   expected = x + 1
   assert y.shape == expected.shape
   assert all(y == expected), "Expected %s but got %s" % (expected, y)
@@ -59,11 +59,31 @@ def test_input_type_error():
   y = np.empty_like(x)
   # function expects int32* so call should fail 
   try: 
-    shiver.parfor(add1_to_elt, n, fixed_args = (x, y), ee = ee)
+    shiver.parfor(add1_to_elt_int32, n, fixed_args = (x, y), ee = ee)
   except:
     return  
   assert False, "Shouldn't have succeeded due to int32*/int64* mismatch"
-  
+
+def test_timing():
+  n = 10**7
+  x = np.arange(n, dtype=float)
+  y = np.empty_like(x)
+  src = "void add1_to_elt_float64(double* x, double* y, long i) { y[i] = x[i] + 1.0; }"
+  fn = llvm_helpers.from_c("add1_to_elt_float64", src)
+  import time 
+  start_t1 = time.time()
+  shiver.parfor(fn, n, fixed_args = (x, y), ee = ee)
+  stop_t1 = time.time()
+  start_t2 = time.time()
+  shiver.parfor(fn, n, fixed_args = (x, y), ee = ee)
+  stop_t2 = time.time()
+  start_t3 = time.time()
+  np.add(x, 1.0, out=y)
+  stop_t3 = time.time()
+  print "First run time: %s" % (stop_t1 - start_t1)
+  print "Second run time: %s" % (stop_t2 - start_t2) 
+  print "Numpy time: %s" % (stop_t3 - start_t3)
+
 
 if __name__ == '__main__':
   testing_helpers.run_local_tests()
