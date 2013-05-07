@@ -21,14 +21,17 @@ Example:
    
    # let's do the same thing again, but here we'll explicitly convert the 
    # fixed array argument to a type LLVM understands 
-   shiver.parfor(fn_one_idx, niters=len(x), fixed_args = [GenericValue.pointer(x.ctypes.data)])
+   x_gv = GenericValue.pointer(x.ctypes.data)
+   shiver.parfor(fn_one_idx, niters=len(x), fixed_args = [x_gv])
    
    # Now we'll build a function which takes two indices which range 
    # over all pairs of integers [1..5] and [1..2] and fills x with their products
    src = "void int(long* x, long i, long j) { x[(j-1)*5 + i-1] = i*j;}" 
    fn_two_idxs = shiver.from_c(src)
 
-   # notice that we're passing in 
+   # notice that we're passing in slices instead of just an integer; 
+   # they're not actually being used to slice into an array but rather 
+   # to indicate the start/stop/step values of the parallel loop nests
    shiver.parfor(fn_two_idxs, niters = (slice(1,6), slice(1,3)), fixed_args =[x])
 ```
 
@@ -38,7 +41,7 @@ FAQ
 
 *Can I use this library to run Python code in parallel?* 
     
-Sorry, no. Shiver is only useful if you're already compiling [LLVM](http://www.drdobbs.com/architecture-and-design/the-design-of-llvm/240001128) code using [llvmpy](http://www.llvmpy.org/). Shiver takes a compiled function which constitutes the body of a loop (or a nesting of loops) and runs that code in parallel. It uses the Python threading API to split up your work and saves from having to deal with [pthreads](http://www.cs.fsu.edu/~baker/realtime/restricted/notes/pthreads.html). 
+Sorry, no. Shiver is only useful if you're already compiling [LLVM](http://www.drdobbs.com/architecture-and-design/the-design-of-llvm/240001128) code using [llvmpy](http://www.llvmpy.org/) or if you want to use shiver's *from_c* helper to compile simple C functions. Shiver takes an LLVM function which constitutes the body of a loop (or a nesting of loops) and runs that code in parallel. It uses the Python threading API to split up your work and saves you from having to deal with [pthreads](http://www.cs.fsu.edu/~baker/realtime/restricted/notes/pthreads.html). 
 
 
 *You're using Python threads, doesn't that mean you're still stuck behind the [GIL](http://stackoverflow.com/questions/1294382/what-is-a-global-interpreter-lock-gil)?*
