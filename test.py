@@ -30,19 +30,19 @@ def test_return_type_causes_failure():
     pass 
 
 def test_add1_from_c():
-  src = "int add1(int x) { return x + 1;}"
-  add1 = llvm_helpers.from_c("add1", src);
+  module = llvm_helpers.from_c("int add1(int x) { return x + 1;}");
+  add1 = module.get_function_named("add1")
   x = 1
-  res = llvm_helpers.run(add1, x)
+  res = llvm_helpers.run(add1, x, ee = ee)
   y = res.as_int()
   assert (x+1) == y, "Expected %d but got %d" % (x+1,y)
 
 
-def mk_add1_to_elt():
-  src = "void add1_to_elt_int32(int* x, int* y, long i) { y[i] = x[i] + 1; }"
-  return llvm_helpers.from_c("add1_to_elt_int32", src, print_llvm = False)
 
-add1_to_elt_int32 = mk_add1_to_elt()
+
+add1_module = llvm_helpers.from_c("void add1_to_elt_int32(int* x, int* y, long i) { y[i] = x[i] + 1; }")
+
+add1_to_elt_int32 = add1_module.get_function_named("add1_to_elt_int32")
 
 def test_add1_arrays():
   n = 12    

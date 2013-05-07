@@ -160,7 +160,7 @@ def empty_fn(module, name, input_types, output_type = ty_void):
 
 import subprocess 
 import tempfile
-def from_c(fn_name, src, compiler = 'clang', print_llvm = False):
+def from_c(src, fn_name = 'fn', compiler = 'clang', print_llvm = False):
   src_filename = tempfile.mktemp(prefix = fn_name + "_src_", suffix = '.c')
 
   f = open(src_filename, 'w')
@@ -177,8 +177,8 @@ def from_c(fn_name, src, compiler = 'clang', print_llvm = False):
     bitcode_filename = tempfile.mktemp(prefix = fn_name + "_bitcode_", suffix = '.o')
     subprocess.check_call([compiler,  '-c', '-emit-llvm',  src_filename, '-o', bitcode_filename, ])
     module = Module.from_bitcode(open(bitcode_filename))
-  return module.get_function_named(fn_name)
-
+  return module 
+  
 def is_llvm_float_type(t):
   return t.kind in (llvm.core.TYPE_FLOAT, llvm.core.TYPE_DOUBLE)
 
@@ -338,8 +338,8 @@ def get_fn_ptr(llvm_fn, ee):
   llvm_input_types = [arg.type for arg in llvm_fn.args]
   ct_input_types = [llvm_type_to_ctypes(lltype) for lltype in llvm_input_types]
   FN_PTR_TYPE = CFUNCTYPE(None, *ct_input_types)
-  fn_addr = ee.get_function_pointer(llvm_fn)
-  fn_ptr = FN_PTR_TYPE(fn_addr) 
-  print fn_ptr.argtypes
+  fn_addr = ee.get_pointer_to_function(llvm_fn)
+  fn_ptr = FN_PTR_TYPE(fn_addr)
+  return fn_ptr 
   
   

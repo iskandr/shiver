@@ -152,7 +152,8 @@ class Worker(threading.Thread):
         # TODO: have to make these types actually match the expected input size
         starts = [from_python(r[0]) for r in ranges]
         stops = [from_python(r[1]) for r in ranges]
-        self.work_fn_ptr(self.fixed_args + starts + stops)
+        args = self.fixed_args + starts + stops
+        self.work_fn_ptr(*args)
         self.q.task_done()
       except Queue.Empty:
         return
@@ -183,7 +184,7 @@ def parfor(fn, niters, fixed_args = (), ee = None, _cache = {}):
     work_fn = mk_wrapper(fn, steps)
     if ee is None:
       ee = llvm.ee.ExecutionEngine.new(fn.module)
-    optimize(work_fn, ee)
+    # optimize(work_fn, ee)
     _cache[cache_key] = work_fn
    
   q = Queue.Queue()
