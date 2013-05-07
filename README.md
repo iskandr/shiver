@@ -46,4 +46,4 @@ Sorry, no. Shiver is only useful if you're already compiling [LLVM](http://www.d
 
 *You're using Python threads, doesn't that mean you're still stuck behind the [GIL](http://stackoverflow.com/questions/1294382/what-is-a-global-interpreter-lock-gil)?*
 
-When Shiver calls into native code (using [ExecutionEngine.run_function](http://sourcecodebrowser.com/llvm-py/0.5plus-psvn85/classllvm_1_1ee_1_1_execution_engine.html#a4da1e185faa9926638751f2bde570ad2)), it releases the Global Interpreter Lock, allowing its threads to actually utilize all of your processors. 
+When Shiver calls into native code it releases the Global Interpreter Lock, allowing its threads to actually utilize all of your processors. 
