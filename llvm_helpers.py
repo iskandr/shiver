@@ -236,3 +236,110 @@ def run(llvm_fn, *input_values, **kwds):
   if ee is None:
     ee = ExecutionEngine.new(llvm_fn.module)
   return ee.run_function(llvm_fn, llvm_inputs)
+
+  llvm.passes.PASSES
+_opt_passes = [
+    'targetlibinfo',
+    'no-aa',
+    'basicaa',
+    'memdep',
+    'tbaa',
+    'instcombine',
+    'simplifycfg',
+    'basiccg',
+    'inline', 
+    'functionattrs',
+    'argpromotion',
+    'memdep',
+    'scalarrepl-ssa',
+    'sroa',
+    'domtree',
+    'early-cse',
+    'simplify-libcalls',
+    'lazy-value-info',
+    'correlated-propagation',
+    'simplifycfg',
+    'instcombine',
+    'reassociate',
+    'domtree',
+    'mem2reg',
+    'scev-aa',
+    'loops',
+    'loop-simplify',
+    'lcssa',
+    'loop-rotate',
+    'licm',
+    'lcssa',
+    'loop-unswitch',
+    'instcombine',
+    'scalar-evolution',
+    'loop-simplify',
+    'lcssa',
+    'indvars',
+    'loop-idiom',
+    'loop-deletion',
+    'loop-unroll',
+    'memdep',
+    'gvn',
+    'memdep',
+    'dse',
+    'adce',
+    'correlated-propagation',
+    'jump-threading',
+    'simplifycfg',
+    'instcombine',
+  ]
+
+
+def optimize(llvm_fn, ee, n_iters = 3):
+  engine_builder = llvm.ee.EngineBuilder.new(llvm_fn.module)
+  engine_builder.force_jit()
+  engine_builder.opt(3)
+  tm = llvm.ee.TargetMachine.new()
+  pm, fpm = llvm.passes.build_pass_managers(tm, opt = 3,
+                                                   loop_vectorize = True, 
+                                                   mod = llvm_fn.module)
+   
+  #function_pass_manager = module_pass_manager.fpm
+  #for p in _opt_passes:
+  #  function_pass_manager.add(p)
+  for p in _opt_passes:
+    pm.add(p)
+    #fpm.add(p)
+  for _ in xrange(n_iters):
+    pm.run(llvm_fn.module)
+
+
+import ctypes   
+
+from ctypes import c_int8, c_int16, c_int32, c_int64
+from ctypes import c_float, c_double
+from ctypes import CFUNCTYPE, POINTER 
+
+llvm_to_ctypes_mapping = {
+  str(ty_int8) : c_int8, 
+  str(ty_int16) : c_int16, 
+  str(ty_int32) : c_int32, 
+  str(ty_int64) : c_int64, 
+  str(ty_float32) : c_float, 
+  str(ty_float64) : c_double,
+  str(ty_ptr_int8) : POINTER(c_int8),  
+  str(ty_ptr_int16) : POINTER(c_int16), 
+  str(ty_ptr_int32) : POINTER(c_int32), 
+  str(ty_ptr_int64) : POINTER(c_int64),                                    
+  str(ty_ptr_float32) : POINTER(c_float),
+  str(ty_ptr_float64) : POINTER(c_double),
+}
+
+def llvm_type_to_ctypes(lltype):
+  return llvm_to_ctypes_mapping[str(lltype)] 
+
+def get_fn_ptr(llvm_fn, ee):
+  llvm_input_types = [arg.type for arg in llvm_fn.args]
+  ct_input_types = [llvm_type_to_ctypes(lltype) for lltype in llvm_input_types]
+  FN_PTR_TYPE = CFUNCTYPE(None, *ct_input_types)
+  fn_addr = ee.get_function_pointer(llvm_fn)
+  fn_ptr = FN_PTR_TYPE(fn_addr) 
+  print fn_ptr.argtypes
+  
+  

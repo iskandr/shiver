@@ -74,9 +74,11 @@ def test_timing():
   start_t1 = time.time()
   shiver.parfor(fn, n, fixed_args = (x, y), ee = ee)
   stop_t1 = time.time()
+  
   start_t2 = time.time()
   shiver.parfor(fn, n, fixed_args = (x, y), ee = ee)
   stop_t2 = time.time()
+  
   start_t3 = time.time()
   np.add(x, 1.0, out=y)
   stop_t3 = time.time()

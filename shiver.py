@@ -5,8 +5,10 @@ import threading
 
 from llvm import *
 from llvm.core import * 
+import llvm.passes 
 
 from llvm_helpers import * 
+import llvm_helpers
 
 
 def safediv(x,y):
@@ -130,11 +132,13 @@ def mk_wrapper(fn, step_sizes):
 
   return wrapper 
 
+
+
 class Worker(threading.Thread):
-  def __init__(self, q, ee, work_fn, fixed_args):
+  def __init__(self, q, work_fn_ptr, fixed_args):
     self.q = q 
     self.ee = ee 
-    self.work_fn = work_fn
+    self.work_fn_ptr = work_fn_ptr
 
     self.fixed_args = list(fixed_args)
     threading.Thread.__init__(self)
@@ -148,14 +152,14 @@ class Worker(threading.Thread):
         # TODO: have to make these types actually match the expected input size
         starts = [from_python(r[0]) for r in ranges]
         stops = [from_python(r[1]) for r in ranges]
-        self.ee.run_function(self.work_fn, self.fixed_args + starts + stops)
+        self.work_fn_ptr(self.fixed_args + starts + stops)
         self.q.task_done()
       except Queue.Empty:
         return
 
 
         
-def parfor(fn, niters, fixed_args = (), ee = None):
+def parfor(fn, niters, fixed_args = (), ee = None, _cache = {}):
   assert isinstance(fn, Function), \
     "Can only run LLVM functions, not %s" % type(fn)
   assert return_type(fn) == ty_void, \
@@ -168,20 +172,30 @@ def parfor(fn, niters, fixed_args = (), ee = None):
   iter_ranges = parse_iters(niters)
   n_fixed = len(fixed_args)
   n_indices = len(iter_ranges)
-  n_args = n_fixed + n_indices 
-  assert len(fn.args) == n_args
-  steps = [iter_range[2] for iter_range in iter_ranges]
-  work_fn = mk_wrapper(fn, steps) 
-  if ee is None:
-    ee = llvm.ee.ExecutionEngine.new(fn.module)
+  cache_key = id(fn) 
+  if cache_key in _cache:
+    work_fn = _cache[cache_key] 
+
+  else: 
+    n_args = n_fixed + n_indices 
+    assert len(fn.args) == n_args
+    steps = [iter_range[2] for iter_range in iter_ranges]
+    work_fn = mk_wrapper(fn, steps)
+    if ee is None:
+      ee = llvm.ee.ExecutionEngine.new(fn.module)
+    optimize(work_fn, ee)
+    _cache[cache_key] = work_fn
+   
   q = Queue.Queue()
   # put all the index ranges into the queue
   for work_item in split_iters(iter_ranges):
     q.put(work_item)
-  print work_fn 
+  
+  fn_ptr = llvm_helpers.get_fn_ptr(work_fn, ee) 
+  
   # start worker threads
   for _ in xrange(cpu_count()):
-    Worker(q, ee, work_fn, fixed_args).start()
+    Worker(q, fn_ptr, fixed_args).start()
   q.join()
     
   
