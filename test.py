@@ -22,7 +22,7 @@ def mk_identity_fn():
 
 ident = mk_identity_fn()
 
-def test_should_fail():
+def test_return_type_causes_failure():
   try:
     shiver.parfor(ident, niters=1)
     assert False, "Shouldn't have accepted function with non-void return"
@@ -39,19 +39,31 @@ def test_add1_from_c():
 
 
 def mk_add1_to_elt():
-  src = "void add1_to_elt(long* x, long* y, long i) { y[i] = x[i] + 1; }"
+  src = "void add1_to_elt(int* x, int* y, long i) { y[i] = x[i] + 1; }"
   return llvm_helpers.from_c("add1_to_elt", src, print_llvm = True)
 
 add1_to_elt = mk_add1_to_elt()
 
 def test_add1_arrays():
   n = 12    
-  x = np.arange(n)
-  y = np.empty(n, dtype=x.dtype)
+  x = np.arange(n, dtype= np.int32)
+  y = np.empty_like(x)
   shiver.parfor(add1_to_elt, n, fixed_args = (x, y), ee = ee)
   expected = x + 1
   assert y.shape == expected.shape
   assert all(y == expected), "Expected %s but got %s" % (expected, y)
+
+def test_input_type_error():
+  n = 12 
+  x = np.arange(n, dtype= np.int64)
+  y = np.empty_like(x)
+  # function expects int32* so call should fail 
+  try: 
+    shiver.parfor(add1_to_elt, n, fixed_args = (x, y), ee = ee)
+  except:
+    return  
+  assert False, "Shouldn't have succeeded due to int32*/int64* mismatch"
+  
 
 if __name__ == '__main__':
   testing_helpers.run_local_tests()

@@ -22,7 +22,7 @@ ty_ptr_int64 = Type.pointer(ty_int64)
 ty_ptr_float32 = Type.pointer(ty_float32)
 ty_ptr_float64 = Type.pointer(ty_float64)
 
-mappings = {
+to_lltype_mappings = {
   np.int8 : ty_int8,             
   np.int16 : ty_int16, 
   np.int32 : ty_int32, 
@@ -33,6 +33,19 @@ mappings = {
   float : ty_float64, 
   bool : ty_int8, 
 }
+
+to_numpy_type_mappings = {
+  str(ty_int8) : np.int8,              
+  str(ty_int16) : np.int16, 
+  str(ty_int32) : np.int32,  
+  str(ty_int64) : np.int64,  
+  str(ty_float32) : np.float32,  
+  str(ty_float64) : np.float64,
+}
+
+to_dtype_mappings = {}
+for (k,v) in to_numpy_type_mappings.iteritems():
+  to_dtype_mappings[k] = np.dtype(v)
 
 def ptr(t):
   return Type.pointer(t)
@@ -50,8 +63,8 @@ def to_lltype(t):
     assert len(t) == 1
     elt_t = to_lltype(t[0])
     return ptr(elt_t) 
-  assert t in mappings, "Unknown type %s" % (t,)
-  return mappings[t]
+  assert t in to_lltype_mappings, "Unknown type %s" % (t,)
+  return to_lltype_mappings[t]
 
 
 def return_type(fn):
@@ -175,31 +188,38 @@ def is_llvm_int_type(t):
 def is_llvm_ptr_type(t):
   return t.kind == llvm.core.TYPE_POINTER
 
-def from_python(x, t = None):
+def from_python(x, llvm_type = None):
   if isinstance(x, GenericValue):
     return x
   elif isinstance(x, (int,long)):
-    t =  ty_int64 if t is None else t
-    assert is_llvm_int_type(t), \
-      "Expected LLVM integer type, not %s" % (t,) 
-    return GenericValue.int(t, x)
+    llvm_type =  ty_int64 if llvm_type is None else llvm_type
+    assert is_llvm_int_type(llvm_type), \
+      "Expected LLVM integer type, not %s" % (llvm_type,) 
+    return GenericValue.int(llvm_type, x)
   elif isinstance(x, float):
-    t = ty_float64 if t is None else t
-    assert is_llvm_float_type(t), \
-        "Expected LLVM float type, not %s" % (t,)
-    return GenericValue.real(t, x)  
+    llvm_type = ty_float64 if llvm_type is None else llvm_type
+    assert is_llvm_float_type(llvm_type), \
+        "Expected LLVM float type, not %s" % (llvm_type,)
+    return GenericValue.real(llvm_type, x)  
   elif isinstance(x, bool):
-    t = ty_int8 if t is None else t
-    assert is_llvm_int_type(t), \
-      "Expected LLVM integer type, not %s" % (t,)
-    return GenericValue.int(t, x)
+    llvm_type = ty_int8 if llvm_type is None else llvm_type
+    assert is_llvm_int_type(llvm_type), \
+      "Expected LLVM integer type, not %s" % (llvm_type,)
+    return GenericValue.int(llvm_type, x)
   else:
-    try:
-      x = np.asarray(x)
-    except: 
-      assert False, \
-          "Don't know how to convert Python value of type %s" % (type(x),)
-    assert t is None or is_llvm_ptr_type(t)
+    
+    assert isinstance(x, np.ndarray)
+    assert llvm_type is not None 
+    assert is_llvm_ptr_type(llvm_type), \
+      "Native argument receiving numpy array must be a pointer, not %s" % (llvm_type,)
+    elt_type = llvm_type.pointee
+    assert is_llvm_float_type(elt_type) or is_llvm_int_type(elt_type)
+    elt_type_str = str(elt_type) 
+    assert elt_type_str in to_dtype_mappings, \
+      "Don't know how to convert LLVM type %s to dtype" % (elt_type_str,)
+    dtype = to_dtype_mappings[elt_type_str]
+    assert dtype == x.dtype, \
+        "Can't pass array with %s* data pointer to function that expects %s*" % (x.dtype, dtype)
     return GenericValue.pointer(x.ctypes.data)
   
 
