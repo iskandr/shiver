@@ -110,7 +110,7 @@ def mk_wrapper(fn, step_sizes):
     assert old_index_type.kind == TYPE_INTEGER, \
         "Last %d input(s) to %s must be integers" % (n_indices, fn.name)
     new_input_types.append(old_index_type)
-  wrapper = empty_fn(fn.module, fn.name + "_wrapper",  new_input_types)
+  wrapper = empty_fn(fn.name + "_wrapper",  new_input_types, module = fn.module)
 
   for arg_idx in xrange(len(new_input_types)):
     if arg_idx < len(old_input_types):
