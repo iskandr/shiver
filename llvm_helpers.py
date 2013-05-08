@@ -104,25 +104,29 @@ def empty_fn( name, input_types, output_type = ty_void, module = shared_module):
   return fn  
 
 
-def module_from_c(src, fn_name = 'fn', compiler = 'clang', print_llvm = False):
-  src_filename = tempfile.mktemp(prefix = fn_name + "_src_", suffix = '.c')
+def module_from_c(src, name = 'fn', compiler = 'clang', print_llvm = False):
+  src_filename = tempfile.mktemp(prefix = name + "_src_", suffix = '.c')
 
   f = open(src_filename, 'w')
   f.write(src + '\n')
   f.close()
   if print_llvm:
-    assembly_filename = tempfile.mktemp(prefix = fn_name + "_llcode_", suffix = '.s')
+    assembly_filename = tempfile.mktemp(prefix = name + "_llcode_", suffix = '.s')
     subprocess.check_call([compiler,  '-c', '-emit-llvm', '-S',  src_filename, '-o', assembly_filename, ])
     llvm_source = open(assembly_filename).read()
     print llvm_source
     module = Module.from_assembly(llvm_source)
     
   else: 
-    bitcode_filename = tempfile.mktemp(prefix = fn_name + "_bitcode_", suffix = '.o')
+    bitcode_filename = tempfile.mktemp(prefix = name + "_bitcode_", suffix = '.o')
     subprocess.check_call([compiler,  '-c', '-emit-llvm',  src_filename, '-o', bitcode_filename, ])
     module = Module.from_bitcode(open(bitcode_filename))
   return module 
-  
+
+def from_c(name, src, compiler = "clang", print_llvm = False):
+  module = module_from_c(src, name, compiler, print_llvm)
+  shared_module.link_in(module)
+  return shared_module.get_function_named(name)
 
 
 

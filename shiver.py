@@ -1,5 +1,6 @@
 import math
 import multiprocessing
+import numpy as np 
 import Queue 
 import threading
 

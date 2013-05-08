@@ -27,8 +27,7 @@ def test_return_type_causes_failure():
     pass 
 
 def test_add1_from_c():
-  module = llvm_helpers.module_from_c("int add1(int x) { return x + 1;}");
-  add1 = module.get_function_named("add1")
+  add1 = llvm_helpers.from_c("add1", "int add1(int x) { return x + 1;}");
   x = 1
   res = shiver.run(add1, x)
   y = res.as_int()
@@ -37,8 +36,7 @@ def test_add1_from_c():
 
 
 add1_src = "void add1_to_elt_int32(int* x, int* y, long i) { y[i] = x[i] + 1; }"
-add1_module = llvm_helpers.module_from_c(add1_src)
-add1_to_elt_int32 = add1_module.get_function_named("add1_to_elt_int32")
+add1_to_elt_int32 = llvm_helpers.from_c("add1_to_elt_int32", add1_src)
 
 def test_add1_arrays():
   n = 12    
@@ -65,7 +63,7 @@ def test_timing():
   x = np.arange(n, dtype=float)
   y = np.empty_like(x)
   src = "void add1_to_elt_float64(double* x, double* y, long i) { y[i] = x[i] + 1.0; }"
-  fn = llvm_helpers.module_from_c(src).get_function_named("add1_to_elt_float64")
+  fn = llvm_helpers.from_c("add1_to_elt_float64", src)
   
   import time 
   start_t1 = time.time()
