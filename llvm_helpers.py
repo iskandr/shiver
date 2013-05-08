@@ -1,75 +1,20 @@
-import numpy as np
 
+
+import subprocess 
+import tempfile
 
 from llvm import * 
 from llvm.core import *
 from llvm.ee import GenericValue, ExecutionEngine 
+from type_helpers import ty_int64, ty_float64, ty_void, lltype_to_ctype
 
-ty_void = Type.void()
-ty_int8 = Type.int(8)
-ty_int16 = Type.int(16) 
-ty_int32 = Type.int(32) 
-ty_int64 = Type.int(64) 
 
-ty_float32 = Type.float()
-ty_float64 = Type.double()
-
-ty_ptr_int8 = Type.pointer(ty_int8)
-ty_ptr_int16 = Type.pointer(ty_int16)
-ty_ptr_int32 = Type.pointer(ty_int32)
-ty_ptr_int64 = Type.pointer(ty_int64)
-
-ty_ptr_float32 = Type.pointer(ty_float32)
-ty_ptr_float64 = Type.pointer(ty_float64)
-
-to_lltype_mappings = {
-  np.int8 : ty_int8,             
-  np.int16 : ty_int16, 
-  np.int32 : ty_int32, 
-  np.int64 : ty_int64, 
-  np.float32 : ty_float32, 
-  np.float64 : ty_float64,
-  int : ty_int64, 
-  float : ty_float64, 
-  bool : ty_int8, 
-}
-
-to_numpy_type_mappings = {
-  str(ty_int8) : np.int8,              
-  str(ty_int16) : np.int16, 
-  str(ty_int32) : np.int32,  
-  str(ty_int64) : np.int64,  
-  str(ty_float32) : np.float32,  
-  str(ty_float64) : np.float64,
-}
-
-to_dtype_mappings = {}
-for (k,v) in to_numpy_type_mappings.iteritems():
-  to_dtype_mappings[k] = np.dtype(v)
-
-def ptr(t):
-  return Type.pointer(t)
-
-def to_lltype(t):
-  """
-  Convert python types to LLVM types.
-  Examples: 
-    to_lltype(int) == Type.int(64)
-    to_lltype([float]) == Type.pointer(Type.double())
-  """
-  if isinstance(t, np.dtype):
-    return to_lltype(t.type)
-  elif isinstance(t, (list,tuple)):
-    assert len(t) == 1
-    elt_t = to_lltype(t[0])
-    return ptr(elt_t) 
-  assert t in to_lltype_mappings, "Unknown type %s" % (t,)
-  return to_lltype_mappings[t]
-
+shared_module = llvm.core.Module.new("shiver_global_module")
+shared_exec_engine = llvm.ee.ExecutionEngine.new(shared_module)
 
 def return_type(fn):
   return fn.type.pointee.return_type 
-
+ 
 
 def const_int(x, t = ty_int64):
   return Constant.int(t, x)
@@ -141,7 +86,7 @@ class LoopBuilder(object):
 
   
 
-def empty_fn(module, name, input_types, output_type = ty_void):
+def empty_fn( name, input_types, output_type = ty_void, module = shared_module):
   names = []
   types = []
   for (i, item) in enumerate(input_types):
@@ -158,9 +103,8 @@ def empty_fn(module, name, input_types, output_type = ty_void):
     arg.name = names[i]
   return fn  
 
-import subprocess 
-import tempfile
-def from_c(src, fn_name = 'fn', compiler = 'clang', print_llvm = False):
+
+def module_from_c(src, fn_name = 'fn', compiler = 'clang', print_llvm = False):
   src_filename = tempfile.mktemp(prefix = fn_name + "_src_", suffix = '.c')
 
   f = open(src_filename, 'w')
@@ -179,65 +123,9 @@ def from_c(src, fn_name = 'fn', compiler = 'clang', print_llvm = False):
     module = Module.from_bitcode(open(bitcode_filename))
   return module 
   
-def is_llvm_float_type(t):
-  return t.kind in (llvm.core.TYPE_FLOAT, llvm.core.TYPE_DOUBLE)
 
-def is_llvm_int_type(t):
-  return t.kind == llvm.core.TYPE_INTEGER
 
-def is_llvm_ptr_type(t):
-  return t.kind == llvm.core.TYPE_POINTER
 
-def from_python(x, llvm_type = None):
-  if isinstance(x, GenericValue):
-    return x
-  elif isinstance(x, (int,long)):
-    llvm_type =  ty_int64 if llvm_type is None else llvm_type
-    assert is_llvm_int_type(llvm_type), \
-      "Expected LLVM integer type, not %s" % (llvm_type,) 
-    return GenericValue.int(llvm_type, x)
-  elif isinstance(x, float):
-    llvm_type = ty_float64 if llvm_type is None else llvm_type
-    assert is_llvm_float_type(llvm_type), \
-        "Expected LLVM float type, not %s" % (llvm_type,)
-    return GenericValue.real(llvm_type, x)  
-  elif isinstance(x, bool):
-    llvm_type = ty_int8 if llvm_type is None else llvm_type
-    assert is_llvm_int_type(llvm_type), \
-      "Expected LLVM integer type, not %s" % (llvm_type,)
-    return GenericValue.int(llvm_type, x)
-  else:
-    
-    assert isinstance(x, np.ndarray)
-    assert llvm_type is not None 
-    assert is_llvm_ptr_type(llvm_type), \
-      "Native argument receiving numpy array must be a pointer, not %s" % (llvm_type,)
-    elt_type = llvm_type.pointee
-    assert is_llvm_float_type(elt_type) or is_llvm_int_type(elt_type)
-    elt_type_str = str(elt_type) 
-    assert elt_type_str in to_dtype_mappings, \
-      "Don't know how to convert LLVM type %s to dtype" % (elt_type_str,)
-    dtype = to_dtype_mappings[elt_type_str]
-    assert dtype == x.dtype, \
-        "Can't pass array with %s* data pointer to function that expects %s*" % (x.dtype, dtype)
-    return GenericValue.pointer(x.ctypes.data)
-  
-
-def run(llvm_fn, *input_values, **kwds):
-  """
-  Given a compiled LLVM function and Python input values, 
-  convert the input to LLVM generic values and run the 
-  function 
-  """
-  ee = kwds.get('ee')
-  llvm_inputs = [from_python(v, arg.type) 
-                 for (v,arg) in 
-                 zip(input_values, llvm_fn.args)]
-  if ee is None:
-    ee = ExecutionEngine.new(llvm_fn.module)
-  return ee.run_function(llvm_fn, llvm_inputs)
-
-  llvm.passes.PASSES
 _opt_passes = [
     'targetlibinfo',
     'no-aa',
@@ -291,14 +179,14 @@ _opt_passes = [
   ]
 
 
-def optimize(llvm_fn, ee, n_iters = 3):
-  engine_builder = llvm.ee.EngineBuilder.new(llvm_fn.module)
-  engine_builder.force_jit()
-  engine_builder.opt(3)
-  tm = llvm.ee.TargetMachine.new()
-  pm, fpm = llvm.passes.build_pass_managers(tm, opt = 3,
-                                                   loop_vectorize = True, 
-                                                   mod = llvm_fn.module)
+def optimize(llvm_fn, n_iters = 3):
+  #engine_builder = llvm.ee.EngineBuilder.new(llvm_fn.module)
+  #engine_builder.force_jit()
+  #engine_builder.opt(3)
+  tm = llvm.ee.TargetMachine.new(opt=3)
+  pm, _ = llvm.passes.build_pass_managers(tm, opt = 3,
+                                            loop_vectorize = True, 
+                                            mod = llvm_fn.module)
    
   #function_pass_manager = module_pass_manager.fpm
   #for p in _opt_passes:
@@ -310,36 +198,10 @@ def optimize(llvm_fn, ee, n_iters = 3):
     pm.run(llvm_fn.module)
 
 
-import ctypes   
 
-from ctypes import c_int8, c_int16, c_int32, c_int64
-from ctypes import c_float, c_double
-from ctypes import CFUNCTYPE, POINTER 
-
-llvm_to_ctypes_mapping = {
-  str(ty_int8) : c_int8, 
-  str(ty_int16) : c_int16, 
-  str(ty_int32) : c_int32, 
-  str(ty_int64) : c_int64, 
-  str(ty_float32) : c_float, 
-  str(ty_float64) : c_double,
-  str(ty_ptr_int8) : POINTER(c_int8),  
-  str(ty_ptr_int16) : POINTER(c_int16), 
-  str(ty_ptr_int32) : POINTER(c_int32), 
-  str(ty_ptr_int64) : POINTER(c_int64),                                    
-  str(ty_ptr_float32) : POINTER(c_float),
-  str(ty_ptr_float64) : POINTER(c_double),
-}
-
-def llvm_type_to_ctypes(lltype):
-  return llvm_to_ctypes_mapping[str(lltype)] 
-
-def get_fn_ptr(llvm_fn, ee):
-  llvm_input_types = [arg.type for arg in llvm_fn.args]
-  ct_input_types = [llvm_type_to_ctypes(lltype) for lltype in llvm_input_types]
-  FN_PTR_TYPE = CFUNCTYPE(None, *ct_input_types)
+def get_fn_ptr(llvm_fn, ee = shared_exec_engine):
+  FN_PTR_TYPE = lltype_to_ctype(llvm_fn.type.pointee)
   fn_addr = ee.get_pointer_to_function(llvm_fn)
-  fn_ptr = FN_PTR_TYPE(fn_addr)
-  return fn_ptr 
+  return FN_PTR_TYPE(fn_addr) 
   
   

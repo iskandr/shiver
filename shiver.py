@@ -9,6 +9,7 @@ import llvm.passes
 
 from llvm_helpers import * 
 import llvm_helpers
+import value_helpers 
 
 
 def safediv(x,y):
@@ -133,6 +134,20 @@ def mk_wrapper(fn, step_sizes):
   return wrapper 
 
 
+def run(fn, *input_values, **kwds):
+  """
+  Given a compiled LLVM function and Python input values, 
+  convert the input to LLVM generic values and run the 
+  function 
+  """
+  if isinstance(fn, llvm.core.Function):
+    ee = kwds.get('ee', shared_exec_engine)
+    fn_ptr = llvm_helpers.get_fn_ptr(fn, ee)
+  else:
+    assert isinstance(fn, ctypes.CFunctionType)
+    fn_ptr = fn
+  ctypes_inputs = value_helpers.ctypes_values_from_python(input_values)
+  return fn_ptr(*ctypes_inputs)
 
 class Worker(threading.Thread):
   def __init__(self, q, work_fn_ptr, fixed_args):
@@ -150,14 +165,15 @@ class Worker(threading.Thread):
       try:
         ranges = self.q.get(False)
         # TODO: have to make these types actually match the expected input size
-        starts = [from_python(r[0]) for r in ranges]
-        stops = [from_python(r[1]) for r in ranges]
+        #starts = [from_python(r[0]) for r in ranges]
+        #stops = [from_python(r[1]) for r in ranges]
+        starts = [r[0] for r in ranges]
+        stops = [r[1] for r in ranges]
         args = self.fixed_args + starts + stops
         self.work_fn_ptr(*args)
         self.q.task_done()
       except Queue.Empty:
         return
-
 
         
 def parfor(fn, niters, fixed_args = (), ee = None, _cache = {}):
@@ -167,9 +183,9 @@ def parfor(fn, niters, fixed_args = (), ee = None, _cache = {}):
     "Body of parfor loop must return void, not %s" % return_type(fn)
   
   # in case fixed arguments aren't yet GenericValues, convert them
-  fixed_args = tuple(from_python(v, arg.type) 
-                     for (v,arg) in 
-                     zip(fixed_args, fn.args))
+  #fixed_args = tuple(gv_from_python(v, arg.type) 
+  #                   for (v,arg) in 
+  #                   zip(fixed_args, fn.args))
   iter_ranges = parse_iters(niters)
   n_fixed = len(fixed_args)
   n_indices = len(iter_ranges)
@@ -198,5 +214,7 @@ def parfor(fn, niters, fixed_args = (), ee = None, _cache = {}):
   for _ in xrange(cpu_count()):
     Worker(q, fn_ptr, fixed_args).start()
   q.join()
+  
+  
     
   

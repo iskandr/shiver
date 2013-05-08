@@ -1,20 +1,17 @@
 import numpy as np
 
-import llvm 
-import llvm.core 
-import llvm.ee  
-from llvm.ee import GenericValue 
+import llvm.core  
 
 import shiver
 import testing_helpers 
 import llvm_helpers
-from llvm_helpers import  ty_int64,  ty_ptr_int64, empty_fn, ty_void, const 
+from type_helpers import ty_int64
+from llvm_helpers import empty_fn 
 
-global_module = llvm.core.Module.new("global_module")
-ee = llvm.ee.ExecutionEngine.new(global_module)
+
 
 def mk_identity_fn():
-  fn = empty_fn(global_module, "ident", (ty_int64,), ty_int64  )
+  fn = empty_fn("ident", (ty_int64,), ty_int64 )
   bb = fn.append_basic_block("entry")
   builder = llvm.core.Builder.new(bb)
   builder.ret(fn.args[0])
@@ -30,25 +27,24 @@ def test_return_type_causes_failure():
     pass 
 
 def test_add1_from_c():
-  module = llvm_helpers.from_c("int add1(int x) { return x + 1;}");
+  module = llvm_helpers.module_from_c("int add1(int x) { return x + 1;}");
   add1 = module.get_function_named("add1")
   x = 1
-  res = llvm_helpers.run(add1, x, ee = ee)
+  res = shiver.run(add1, x)
   y = res.as_int()
   assert (x+1) == y, "Expected %d but got %d" % (x+1,y)
 
 
 
-
-add1_module = llvm_helpers.from_c("void add1_to_elt_int32(int* x, int* y, long i) { y[i] = x[i] + 1; }")
-
+add1_src = "void add1_to_elt_int32(int* x, int* y, long i) { y[i] = x[i] + 1; }"
+add1_module = llvm_helpers.module_from_c(add1_src)
 add1_to_elt_int32 = add1_module.get_function_named("add1_to_elt_int32")
 
 def test_add1_arrays():
   n = 12    
   x = np.arange(n, dtype= np.int32)
   y = np.empty_like(x)
-  shiver.parfor(add1_to_elt_int32, n, fixed_args = (x, y), ee = ee)
+  shiver.parfor(add1_to_elt_int32, n, fixed_args = (x, y))
   expected = x + 1
   assert y.shape == expected.shape
   assert all(y == expected), "Expected %s but got %s" % (expected, y)
@@ -59,7 +55,7 @@ def test_input_type_error():
   y = np.empty_like(x)
   # function expects int32* so call should fail 
   try: 
-    shiver.parfor(add1_to_elt_int32, n, fixed_args = (x, y), ee = ee)
+    shiver.parfor(add1_to_elt_int32, n, fixed_args = (x, y))
   except:
     return  
   assert False, "Shouldn't have succeeded due to int32*/int64* mismatch"
@@ -69,14 +65,15 @@ def test_timing():
   x = np.arange(n, dtype=float)
   y = np.empty_like(x)
   src = "void add1_to_elt_float64(double* x, double* y, long i) { y[i] = x[i] + 1.0; }"
-  fn = llvm_helpers.from_c("add1_to_elt_float64", src)
+  fn = llvm_helpers.module_from_c(src).get_function_named("add1_to_elt_float64")
+  
   import time 
   start_t1 = time.time()
-  shiver.parfor(fn, n, fixed_args = (x, y), ee = ee)
+  shiver.parfor(fn, n, fixed_args = (x, y))
   stop_t1 = time.time()
   
   start_t2 = time.time()
-  shiver.parfor(fn, n, fixed_args = (x, y), ee = ee)
+  shiver.parfor(fn, n, fixed_args = (x, y))
   stop_t2 = time.time()
   
   start_t3 = time.time()
