@@ -4,7 +4,7 @@ from ctypes import c_int8, c_int64, c_double, POINTER
 from llvm.ee import GenericValue
 
 import type_helpers
-from type_helpers import ty_int64, ty_float64, ty_int8
+from type_helpers import ty_int64, ty_float64, ty_int8, ctype_to_dtype
 from type_helpers import is_llvm_float_type, is_llvm_int_type
 from type_helpers import is_llvm_ptr_type, lltype_to_dtype
 from type_helpers import is_ctypes_int_type, is_ctypes_real_type
@@ -63,14 +63,21 @@ def ctypes_value_from_python(x, ctype = None):
     if ctype is None:
       elt_type = python_to_ctype(x.dtype)
       ctype = POINTER(elt_type)
+      assert is_ctypes_real_type(elt_type) or is_ctypes_int_type(elt_type)
+      dtype = ctype_to_dtype(elt_type)
+      assert dtype == x.dtype, \
+        "Can't pass array with %s* data pointer to function that expects %s*" % (x.dtype, dtype)
     else:
       assert is_ctypes_ptr_type(ctype), \
         "Native argument receiving numpy array must be a pointer, not %s" % (ctype,)
-      elt_type = ctype.pointee
-    assert is_ctypes_real_type(elt_type) or is_ctypes_int_type(elt_type)
-    
-    assert elt_type_str in to_dtype_mappings, \
-      "Don't know how to convert LLVM type %s to dtype" % (elt_type_str,)
-    dtype = to_dtype_mappings[elt_type_str]
-    assert dtype == x.dtype, \
-        "Can't pass array with %s* data pointer to function that expects %s*" % (x.dtype, dtype)
+    print x.dtype  
+    print ctype 
+    print x.ctypes.data 
+    return ctype.from_address(x.ctypes.data)
+
+def ctypes_values_from_python(vs, ctypes = None):
+  if ctypes is not None:
+    assert len(vs) == len(ctypes), "Received %d values and %d types" % (len(vs), len(ctypes))
+    return [ctypes_value_from_python(v,ct) for (v,ct) in zip(vs, ctypes)]
+  else:
+    return [ctypes_value_from_python(v) for v in vs]

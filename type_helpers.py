@@ -25,6 +25,9 @@ ty_int64 = lltype.int(64)
 ty_float32 = lltype.float()
 ty_float64 = lltype.double()
 
+ty_pyobj = lltype.opaque("PyObj")
+ty_ptr_pyobj = lltype.pointer(ty_pyobj)
+
 ty_ptr_int8 = lltype.pointer(ty_int8)
 ty_ptr_int16 = lltype.pointer(ty_int16)
 ty_ptr_int32 = lltype.pointer(ty_int32)
@@ -146,7 +149,8 @@ def is_ctypes_int_type(t):
   return t in (c_int8, c_int16, c_int32, c_int64)
 
 def is_ctypes_ptr_type(t):
-  return t in (c_int8, c_int16, c_int32, c_int64)
+  return hasattr(t, 'contents')
+  
 
 def python_to_ctype(t):
   lltype = python_to_lltype(t)

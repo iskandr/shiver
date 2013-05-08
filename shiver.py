@@ -98,41 +98,6 @@ def split_iters(iter_ranges, n_threads = None):
           
 
 
-def mk_wrapper(fn, step_sizes):
-  n_indices = len(step_sizes)
-
-  # need to double the integer index inputs to allow for a stop argument 
-  # of each   the number of index inputs to
-  old_input_types = [arg.type for arg in fn.args]
-  new_input_types = [t for t in old_input_types]
-  for i in xrange(n_indices):
-    old_index_type = old_input_types[-n_indices + i]
-    assert old_index_type.kind == TYPE_INTEGER, \
-        "Last %d input(s) to %s must be integers" % (n_indices, fn.name)
-    new_input_types.append(old_index_type)
-  wrapper = empty_fn(fn.name + "_wrapper",  new_input_types, module = fn.module)
-
-  for arg_idx in xrange(len(new_input_types)):
-    if arg_idx < len(old_input_types):
-      wrapper.args[arg_idx].name = fn.args[arg_idx].name 
-    else:
-      wrapper.args[arg_idx].name = fn.args[arg_idx - n_indices].name + "_stop"
-  index_vars = wrapper.args[-2*n_indices:]
-  closure_vars = wrapper.args[:-2*n_indices]
-  start_vars = index_vars[:n_indices]
-  stop_vars = index_vars[n_indices:]
-  
-  assert len(start_vars) == len(stop_vars)
-  loop_builder = LoopBuilder(wrapper, 
-                             fn, 
-                             closure_vars, 
-                             start_vars, 
-                             stop_vars, 
-                             step_sizes)
-  exit_builder = loop_builder.create()
-  exit_builder.ret_void()
-
-  return wrapper 
 
 
 def run(fn, *input_values, **kwds):
@@ -145,7 +110,8 @@ def run(fn, *input_values, **kwds):
     ee = kwds.get('ee', shared_exec_engine)
     fn_ptr = llvm_helpers.get_fn_ptr(fn, ee)
   else:
-    assert isinstance(fn, ctypes.CFunctionType)
+    # TODO: Check that fn is actually a ctypes function 
+    assert hasattr(fn, 'restype')
     fn_ptr = fn
   ctypes_inputs = value_helpers.ctypes_values_from_python(input_values)
   return fn_ptr(*ctypes_inputs)
@@ -153,10 +119,9 @@ def run(fn, *input_values, **kwds):
 class Worker(threading.Thread):
   def __init__(self, q, work_fn_ptr, fixed_args):
     self.q = q 
-    self.ee = ee 
     self.work_fn_ptr = work_fn_ptr
-
     self.fixed_args = list(fixed_args)
+    
     threading.Thread.__init__(self)
 
   
@@ -171,13 +136,15 @@ class Worker(threading.Thread):
         starts = [r[0] for r in ranges]
         stops = [r[1] for r in ranges]
         args = self.fixed_args + starts + stops
+        args = value_helpers.ctypes_values_from_python(args, self.work_fn_ptr.argtypes)
+        
         self.work_fn_ptr(*args)
         self.q.task_done()
       except Queue.Empty:
         return
 
         
-def parfor(fn, niters, fixed_args = (), ee = None, _cache = {}):
+def parfor(fn, niters, fixed_args = (), ee = shared_exec_engine, _cache = {}):
   assert isinstance(fn, Function), \
     "Can only run LLVM functions, not %s" % type(fn)
   assert return_type(fn) == ty_void, \
