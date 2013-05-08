@@ -1,13 +1,21 @@
 import numpy as np 
 import ctypes   
-
 from ctypes import c_int8, c_int16, c_int32, c_int64
 from ctypes import c_float, c_double
 from ctypes import CFUNCTYPE, POINTER
 
+c_int8_p = POINTER(c_int8)
+c_int16_p = POINTER(c_int16)
+c_int32_p = POINTER(c_int32)
+c_int64_p = POINTER(c_int64)
+c_float_p = POINTER(c_float)
+c_double_p = POINTER(c_double)
+
 import llvm.core as llc
 from llvm.core import Type as lltype  
+
  
+
 ty_void = lltype.void()
 ty_int8 = lltype.int(8)
 ty_int16 = lltype.int(16) 
@@ -130,3 +138,47 @@ def lltype_to_ctype(lltype):
       "Don't know how to convert LLVM type %s to ctypes" % (t_str,)
   return llvm_to_ctypes_mapping[t_str] 
 
+
+def is_ctypes_real_type(t):
+  return t in (c_float, c_double)
+
+def is_ctypes_int_type(t):
+  return t in (c_int8, c_int16, c_int32, c_int64)
+
+def is_ctypes_ptr_type(t):
+  return t in (c_int8, c_int16, c_int32, c_int64)
+
+def python_to_ctype(t):
+  lltype = python_to_lltype(t)
+  return lltype_to_ctype(lltype)
+
+ctype_to_lltype_mapping = {
+  c_int8 : ty_int8,   
+  c_int16 : ty_int16,  
+  c_int32 : ty_int32,  
+  c_int64 : ty_int64,  
+  c_float : ty_float32,  
+  c_double : ty_float64,  
+  c_int8_p : ty_ptr_int8,    
+  c_int16_p : ty_ptr_int16,  
+  c_int32_p : ty_ptr_int32,  
+  c_int64_p : ty_ptr_int64,                                     
+  c_float_p : ty_ptr_float32, 
+  c_double_p : ty_ptr_float64
+}
+
+def ctype_to_lltype(ctype):
+  if ctype is None:
+    return ty_void
+  if hasattr(ctype, 'argtypes'):
+    llvm_argtypes = [ctype_to_lltype(arg_t) for arg_t in ctype.argtypes]
+    llvm_ret_type = ctype_to_lltype(ctype.restype)
+    return lltype.function(llvm_ret_type, llvm_argtypes) 
+  else: 
+    assert ctype in ctype_to_lltype_mapping, \
+      "Don't know how to convert C type %s to LLVM type" % (ctype,)
+    return llvm_to_ctypes_mapping[ctype] 
+
+def ctype_to_dtype(t):
+  lltype = ctype_to_lltype(t)
+  return lltype_to_dtype(lltype)
