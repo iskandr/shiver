@@ -139,7 +139,10 @@ def mk_parfor_wrapper_no_return(fn, step_sizes):
 
 def mk_parfor_wrapper_collect_returned_values(fn, step_sizes, dim_sizes, result_t):
   
-  write_output_fn = empty_fn("write_output_%s" % fn.name, 
+  name = "write_output_%s" % fn.name 
+  for step_size in step_sizes:
+    name = name + "_%d" % step_size
+  write_output_fn = empty_fn(name, 
                      [Type.pointer(result_t)] + input_types(fn), 
                      output_type=ty_void, 
                      module = fn.module)

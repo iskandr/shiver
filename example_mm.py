@@ -8,48 +8,46 @@ import shiver
 
 _compilation_cache = {}
 def mm(x, y, output_elt_type = None):
-  
-  xt = x.dtype 
-  yt = y.dtype
-  if output_elt_type is None:
-    # use NumPy's type logic to figure out the 
-    # sanest type to contain the products of elements
-    # from x and y 
-    zt = np.promote_types(xt, yt)
-  else:
-    zt = output_elt_type
-    
   m,d = x.shape 
   n = y.shape[1]
   assert d == y.shape[0]
+  
+  # use NumPy's type logic to figure out the 
+  # sanest type to contain the products of elements
+  # from x and y 
+  if output_elt_type is None: 
+    output_elt_type = np.promote_types(x.dtype, y.dtype)
+    
+  xt = shiver.dtype_to_ctype_name(x.dtype)
+  yt = shiver.dtype_to_ctype_name(y.dtype)
+  zt = shiver.dtype_to_ctype_name(output_elt_type)  
   
   cache_key = (m,n,d,xt,yt,zt)
 
   if cache_key in _compilation_cache:
     llvm_fn = _compilation_cache[cache_key]
   else:
-    x_ctype = shiver.dtype_to_ctype_name(xt)
-    y_ctype = shiver.dtype_to_ctype_name(yt)
-    z_ctype = shiver.dtype_to_ctype_name(zt)
     name = "mm_%(m)d_%(n)d_%(d)d_%(xt)s_%(yt)s_%(zt)s" % locals()
-    args = "%(x_ctype)s* x, %(y_ctype)s* y, long i, long j" % locals()
+    args = "%(xt)s* x, %(yt)s* y, long i, long j" % locals()
     src = """
-      %(z_ctype)s %(name)s (%(args)s) {     
+      %(zt)s %(name)s (%(args)s) {     
         int m = %(m)d; 
         int n = %(n)d; 
         int d = %(d)d; 
-        %(z_ctype)s total = 0;  
+        %(zt)s total = 0;
+        
         for (int k = 0; k < d; ++k) { 
           // assume row-major indexing on 
           // both input arrays, which should 
           // be ensured by the calling code 
-          %(x_ctype)s xelt = x[i*d + k];
-          %(y_ctype)s yelt = y[j*d + k];
+          %(xt)s xelt = x[i*d + k];
+          %(yt)s yelt = y[j*d + k];
           total += xelt * yelt;   
         }
         return total;
       }
     """ % locals()
+    print src 
     llvm_fn = shiver.from_c(name, src)
     _compilation_cache[cache_key] = llvm_fn
    
@@ -61,7 +59,7 @@ def mm(x, y, output_elt_type = None):
 
 import time 
 if __name__ == '__main__':
-  m, n, d = 1000,1000,500
+  m, n, d = 1000,1000,1000
   x = np.random.randn(m,d)
   y = np.random.randn(d,n)
   
