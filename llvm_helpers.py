@@ -63,7 +63,8 @@ class LoopBuilder(object):
     assert len(step_constants) == self.n_loops 
     n_args = len(original_fn.args)
     assert len(closure_values) + self.n_loops == n_args
-  
+    self.inner_call = None 
+    
   _loop_var_names = ['i', 'j', 'k', 'l']
   
   def new_block(self, name):
@@ -75,13 +76,21 @@ class LoopBuilder(object):
     maxpos = len(self._loop_var_names)
     return self._loop_var_names[pos % maxpos] * ((pos/maxpos)+1)
   
-  
+  def inline_inner_call(self):
+    """
+    After the wrapper function is fully constructed, 
+    call this method to inline the user function into 
+    the innermost loop nest
+    """
+    llvm.core.inline_function(self.inner_call)
+    
   def create(self, bb, builder, loop_idx_values = []):
     n = len(loop_idx_values)
     if n == self.n_loops:
+      # save the LLVM call node so we can inline it later 
+      self.inner_call = builder.call(self.original_fn, self.closure_values + loop_idx_values)
+     
       
-      call = builder.call(self.original_fn, self.closure_values + loop_idx_values)
-      llvm.core.inline_function(call)
       return builder
     else:
       start = self.start_values[n]
@@ -150,6 +159,7 @@ def from_c(name, src, compiler = "clang", print_llvm = False):
 
 
 _opt_passes = [
+
     'targetlibinfo',
     'no-aa',
     'basicaa',
@@ -158,9 +168,8 @@ _opt_passes = [
     'instcombine',
     'simplifycfg',
     'basiccg',
-    #'inline', 
-    #'functionattrs',
-    #'argpromotion',
+    'verify', 
+
     'memdep',
     'scalarrepl-ssa',
     'sroa',
@@ -202,33 +211,36 @@ _opt_passes = [
   ]
 
 
-def optimize(llvm_fn, n_iters = 3):
-  #engine_builder = llvm.ee.EngineBuilder.new(llvm_fn.module)
-  #engine_builder.force_jit()
-  #engine_builder.opt(3)
+def optimize(llvm_fn, n_iters = 4, module_opts = False):
+
   tm = llvm.ee.TargetMachine.new(opt=3)
-  _, fpm = llvm.passes.build_pass_managers(tm, opt = 3,
+  pm, fpm = llvm.passes.build_pass_managers(tm, opt = 3,
                                             loop_vectorize = True,  
                                             mod = llvm_fn.module)
   
-
-  #function_pass_manager = module_pass_manager.fpm
-  #for p in _opt_passes:
-  #  function_pass_manager.add(p)
+  
+  if module_opts: 
+    for p in ['functionattrs', 
+              'argpromotion', 
+              'inline', 
+              'memdep', 
+              'loop-unroll']:  
+      pm.add(p)
+    
+    pm.run(llvm_fn.module)
+    pm.run(llvm_fn.module)
+  
   for p in _opt_passes:
     fpm.add(p)
-    #fpm.add(p)
+
   for _ in xrange(n_iters):
     fpm.run(llvm_fn)
-  
-  
+
 
 def get_fn_ptr(llvm_fn, ee = shared_exec_engine):
   FN_PTR_TYPE = lltype_to_ctype(llvm_fn.type.pointee)
   fn_addr = ee.get_pointer_to_function(llvm_fn)
   return FN_PTR_TYPE(fn_addr) 
-  
-  
 
 def mk_wrapper(fn, step_sizes):
   n_indices = len(step_sizes)
@@ -262,6 +274,7 @@ def mk_wrapper(fn, step_sizes):
                              stop_vars, 
                              step_sizes)
   
+  
   entry_bb, entry_builder = loop_builder.new_block("entry")
   
   
@@ -275,5 +288,10 @@ def mk_wrapper(fn, step_sizes):
   exit_builder.call(PyEval_AcquireLock, [])
   exit_builder.call(PyThreadState_Swap, [thread_state])
   exit_builder.ret_void()
+  
+  # have to inline the call to the user function after the wrapper
+  # is fully constructed or else LLVM crashes complaining 
+  # about missing block terminators 
+  loop_builder.inline_inner_call()
   return wrapper 
   

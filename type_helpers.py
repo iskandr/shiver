@@ -149,11 +149,30 @@ def is_ctypes_int_type(t):
 
 def is_ctypes_ptr_type(t):
   return hasattr(t, 'contents')
-  
 
 def python_to_ctype(t):
   lltype = python_to_lltype(t)
   return lltype_to_ctype(lltype)
+
+def dtype_to_ctype(t):
+  assert isinstance(t, np.dtype)
+  return python_to_ctype(t.type)
+
+_ctypes_names = { 
+  c_int8 : 'char', 
+  c_int16 : 'int16_t', 
+  c_int32 : 'int', 
+  c_int64 : 'long', 
+  c_float : 'float', 
+  c_double :'double',                  
+}
+
+def ctype_name(ct):
+  return _ctypes_names[ct]
+
+def dtype_to_ctype_name(t):
+  return ctype_name(dtype_to_ctype(t))
+
 
 ctype_to_lltype_mapping = {
   c_int8 : ty_int8,   

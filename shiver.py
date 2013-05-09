@@ -5,16 +5,14 @@ import Queue
 import sys
 import threading
 
-from llvm import *
-from llvm.core import * 
-import llvm.passes 
+from llvm.core import Function 
+from llvm.ee import GenericValue 
+from llvm_helpers import mk_wrapper, return_type, shared_exec_engine, optimize
+from llvm_helpers import module_from_c, from_c  
 
-from llvm_helpers import * 
-
-import value_helpers 
 from type_helpers import is_llvm_float_type, is_llvm_int_type, is_llvm_ptr_type
-from type_helpers import lltype_to_dtype, ty_int8
-
+from type_helpers import lltype_to_dtype, ty_int8, ty_int64, ty_float64, ty_void  
+from type_helpers import dtype_to_ctype_name 
 
 def safediv(x,y):
   return int(math.ceil(x / float(y)))
@@ -74,28 +72,42 @@ def split_iters(iter_ranges, n_threads = None):
   For now, we just pick the biggest dimension and split 
   it into min(dimsize, 10*n_cores pieces)
   """
+
+
   if n_threads is None:
     n_threads = cpu_count()
   
   counts = [safediv(r[1] - r[0], r[2]) for r in iter_ranges]
+  largest_dim = np.max(counts)
+  total_count = float(np.sum(counts))
+  split_factors = [ (c / total_count) ** 3 for c in counts ]
+  n_pieces = min(2*n_threads, largest_dim)
 
-  biggest_dim = np.argmax(counts)
-  dimsize = counts[biggest_dim]
-  n_pieces = min(5*n_threads, dimsize)
-  factor = float(dimsize) / n_pieces
-  pieces = []
-  r = iter_ranges[biggest_dim]
-  total_start = r[0]
-  total_step = r[2]
-  for i in xrange(n_pieces):
-    # copy all the var ranges, after which we'll modifying 
-    # the biggest dimension 
-    piece = [r for r in iter_ranges]
-    start = total_start + int(math.floor(total_step * factor * i))
-    stop = total_start + int(math.floor(total_step * factor * (i+1))) 
-    piece[biggest_dim] = (start,stop,total_step)
-    pieces.append(piece)
-  return pieces   
+  
+  # initialize work_items with an empty single range 
+  work_items = [[]]
+  for (dim_idx,dim_count) in enumerate(counts):
+
+    dim_start, _, dim_step = iter_ranges[dim_idx]
+    n_dim_pieces = int(math.ceil(split_factors[dim_idx] * n_pieces))
+    dim_factor = float(dim_count) / n_dim_pieces
+    
+    old_work_items = [p for p in work_items]
+    work_items = []
+    for i in xrange(n_dim_pieces):
+      # copy all the var ranges, after which we'll modifying 
+      # the biggest dimension 
+
+      start = dim_start + int(math.floor(dim_step * dim_factor * i))
+      stop = dim_start + int(math.floor(dim_step * dim_factor * (i+1)))
+      
+      dim_work_item = (start,stop,dim_step)
+      for old_work_item in old_work_items:
+        new_work_item = [r for r in old_work_item]
+        new_work_item.append(dim_work_item) 
+        work_items.append(new_work_item)
+ 
+  return work_items 
   
           
 
@@ -142,15 +154,8 @@ def run(fn, *input_values, **kwds):
   convert the input to LLVM generic values and run the 
   function 
   """
-  #if isinstance(fn, llvm.core.Function):
+  
   ee = kwds.get('ee', shared_exec_engine)
-  #fn_ptr = llvm_helpers.get_fn_ptr(fn, ee)
-  #else:
-    # TODO: Check that fn is actually a ctypes function 
-    #assert hasattr(fn, 'restype')
-    #fn_ptr = fn
-  #ctypes_inputs = value_helpers.ctypes_values_from_python(input_values)
-  #return fn_ptr(*ctypes_inputs)
   input_types = [arg.type for arg in fn.args]
   gv_inputs = [gv_from_python(x, t) 
                for (x,t) in 
@@ -173,8 +178,6 @@ class Worker(threading.Thread):
       try:
         ranges = self.q.get(False)
         # TODO: have to make these types actually match the expected input size
-        #starts = [from_python(r[0]) for r in ranges]
-        #stops = [from_python(r[1]) for r in ranges]
         index_types = [arg.type for arg in self.llvm_fn.args[-len(ranges):]]
         starts = [gv_from_python(r[0], t) 
                   for (r,t) in 
@@ -183,10 +186,7 @@ class Worker(threading.Thread):
                   for (r,t) in 
                   zip(ranges, index_types)]        
         args = self.fixed_args + starts + stops
-        #args = value_helpers.ctypes_values_from_python(args, self.work_fn_ptr.argtypes)
-        #self.work_fn_ptr(*args)
         run_with_generic_values(self.llvm_fn, args, self.ee)
-        #args = [value_helpers.gv_from_python(x,t)]
         self.q.task_done()
       except Queue.Empty:
         return
@@ -213,7 +213,9 @@ def parfor(fn, niters, fixed_args = (), ee = shared_exec_engine, _cache = {}):
     n_args = n_fixed + n_indices 
     assert len(fn.args) == n_args
     steps = [iter_range[2] for iter_range in iter_ranges]
+
     work_fn = mk_wrapper(fn, steps)
+
     optimize(work_fn)
  
     _cache[cache_key] = work_fn
@@ -223,7 +225,6 @@ def parfor(fn, niters, fixed_args = (), ee = shared_exec_engine, _cache = {}):
   for work_item in split_iters(iter_ranges):
     q.put(work_item)
   
-  #fn_ptr = llvm_helpers.get_fn_ptr(work_fn, ee) 
   
   # start worker threads
   for _ in xrange(cpu_count()):
