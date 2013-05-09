@@ -272,6 +272,5 @@ def mk_wrapper(fn, step_sizes):
   exit_builder.call(PyEval_AcquireLock, [])
   exit_builder.call(PyThreadState_Swap, [thread_state])
   exit_builder.ret_void()
-  print wrapper 
   return wrapper 
   

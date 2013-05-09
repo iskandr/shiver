@@ -70,9 +70,6 @@ def ctypes_value_from_python(x, ctype = None):
     else:
       assert is_ctypes_ptr_type(ctype), \
         "Native argument receiving numpy array must be a pointer, not %s" % (ctype,)
-    print x.dtype  
-    print ctype 
-    print x.ctypes.data 
     return ctype.from_address(x.ctypes.data)
 
 def ctypes_values_from_python(vs, ctypes = None):

@@ -9,7 +9,6 @@ from type_helpers import ty_int64
 from llvm_helpers import empty_fn 
 
 
-
 def mk_identity_fn():
   fn = empty_fn("ident", (ty_int64,), ty_int64 )
   bb = fn.append_basic_block("entry")
@@ -59,7 +58,7 @@ def test_input_type_error():
   assert False, "Shouldn't have succeeded due to int32*/int64* mismatch"
 
 def test_timing():
-  n = 10**7
+  n = 10**8
   x = np.arange(n, dtype=float)
   y = np.empty_like(x)
   src = "void add1_to_elt_float64(double* x, double* y, long i) { y[i] = x[i] + 1.0; }"

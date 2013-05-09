@@ -2,6 +2,7 @@ import math
 import multiprocessing
 import numpy as np 
 import Queue 
+import sys
 import threading
 
 from llvm import *
@@ -78,12 +79,11 @@ def split_iters(iter_ranges, n_threads = None):
 
   biggest_dim = np.argmax(counts)
   dimsize = counts[biggest_dim]
-  n_pieces = min(10*n_threads, dimsize)
+  n_pieces = min(5*n_threads, dimsize)
   factor = float(dimsize) / n_pieces
   pieces = []
   r = iter_ranges[biggest_dim]
   total_start = r[0]
-
   total_step = r[2]
   for i in xrange(n_pieces):
     # copy all the var ranges, after which we'll modifying 
@@ -98,7 +98,11 @@ def split_iters(iter_ranges, n_threads = None):
           
 
 
-
+def run_with_generic_values(fn, gv_inputs, ee):  
+  n_given = len(gv_inputs)
+  n_expected = len(gv_inputs)
+  assert n_given == n_expected, "Expected %d inputs but got %d" % (n_expected, n_given)
+  return ee.run_function(fn, gv_inputs)
 
 def run(fn, *input_values, **kwds):
   """
@@ -106,41 +110,57 @@ def run(fn, *input_values, **kwds):
   convert the input to LLVM generic values and run the 
   function 
   """
-  if isinstance(fn, llvm.core.Function):
-    ee = kwds.get('ee', shared_exec_engine)
-    fn_ptr = llvm_helpers.get_fn_ptr(fn, ee)
-  else:
+  #if isinstance(fn, llvm.core.Function):
+  ee = kwds.get('ee', shared_exec_engine)
+  #fn_ptr = llvm_helpers.get_fn_ptr(fn, ee)
+  #else:
     # TODO: Check that fn is actually a ctypes function 
-    assert hasattr(fn, 'restype')
-    fn_ptr = fn
-  ctypes_inputs = value_helpers.ctypes_values_from_python(input_values)
-  return fn_ptr(*ctypes_inputs)
+    #assert hasattr(fn, 'restype')
+    #fn_ptr = fn
+  #ctypes_inputs = value_helpers.ctypes_values_from_python(input_values)
+  #return fn_ptr(*ctypes_inputs)
+  input_types = [arg.type for arg in fn.args]
+  gv_inputs = [value_helpers.gv_from_python(x, t) 
+               for (x,t) in 
+               zip(input_values, input_types)]
+  
+  return run_with_generic_values(fn, gv_inputs, ee)
+
 
 class Worker(threading.Thread):
-  def __init__(self, q, work_fn_ptr, fixed_args):
+  def __init__(self, q, ee, llvm_fn, fixed_args):
+    self.ee = ee 
     self.q = q 
-    self.work_fn_ptr = work_fn_ptr
-    self.fixed_args = list(fixed_args)
-    
+    self.llvm_fn = llvm_fn
+    self.fixed_args = list(fixed_args)    
     threading.Thread.__init__(self)
-
   
   
   def run(self):
+    print threading.current_thread().name, "started..." 
+    sys.stdout.flush()
     while True:
       try:
         ranges = self.q.get(False)
         # TODO: have to make these types actually match the expected input size
         #starts = [from_python(r[0]) for r in ranges]
         #stops = [from_python(r[1]) for r in ranges]
-        starts = [r[0] for r in ranges]
-        stops = [r[1] for r in ranges]
+        index_types = [arg.type for arg in self.llvm_fn.args[-len(ranges):]]
+        starts = [value_helpers.gv_from_python(r[0], t) 
+                  for (r,t) in 
+                  zip(ranges, index_types)]
+        stops = [value_helpers.gv_from_python(r[1], t) 
+                  for (r,t) in 
+                  zip(ranges, index_types)]        
         args = self.fixed_args + starts + stops
-        args = value_helpers.ctypes_values_from_python(args, self.work_fn_ptr.argtypes)
-        
-        self.work_fn_ptr(*args)
+        #args = value_helpers.ctypes_values_from_python(args, self.work_fn_ptr.argtypes)
+        #self.work_fn_ptr(*args)
+        run_with_generic_values(self.llvm_fn, args, self.ee)
+        #args = [value_helpers.gv_from_python(x,t)]
         self.q.task_done()
       except Queue.Empty:
+        print threading.current_thread().name, "stopped..."
+        sys.stdout.flush()
         return
 
         
@@ -151,9 +171,9 @@ def parfor(fn, niters, fixed_args = (), ee = shared_exec_engine, _cache = {}):
     "Body of parfor loop must return void, not %s" % return_type(fn)
   
   # in case fixed arguments aren't yet GenericValues, convert them
-  #fixed_args = tuple(gv_from_python(v, arg.type) 
-  #                   for (v,arg) in 
-  #                   zip(fixed_args, fn.args))
+  fixed_args = tuple(value_helpers.gv_from_python(v, arg.type) 
+                     for (v,arg) in 
+                     zip(fixed_args, fn.args))
   iter_ranges = parse_iters(niters)
   n_fixed = len(fixed_args)
   n_indices = len(iter_ranges)
@@ -166,9 +186,8 @@ def parfor(fn, niters, fixed_args = (), ee = shared_exec_engine, _cache = {}):
     assert len(fn.args) == n_args
     steps = [iter_range[2] for iter_range in iter_ranges]
     work_fn = mk_wrapper(fn, steps)
-    if ee is None:
-      ee = llvm.ee.ExecutionEngine.new(fn.module)
-    # optimize(work_fn, ee)
+    optimize(work_fn)
+    print work_fn 
     _cache[cache_key] = work_fn
    
   q = Queue.Queue()
@@ -176,11 +195,11 @@ def parfor(fn, niters, fixed_args = (), ee = shared_exec_engine, _cache = {}):
   for work_item in split_iters(iter_ranges):
     q.put(work_item)
   
-  fn_ptr = llvm_helpers.get_fn_ptr(work_fn, ee) 
+  #fn_ptr = llvm_helpers.get_fn_ptr(work_fn, ee) 
   
   # start worker threads
   for _ in xrange(cpu_count()):
-    Worker(q, fn_ptr, fixed_args).start()
+    Worker(q, ee, work_fn, fixed_args).start()
   q.join()
   
   
