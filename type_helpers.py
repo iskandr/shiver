@@ -1,20 +1,8 @@
 import numpy as np 
-import ctypes   
-from ctypes import c_int8, c_int16, c_int32, c_int64
-from ctypes import c_float, c_double
-from ctypes import CFUNCTYPE, POINTER
 
-c_int8_p = POINTER(c_int8)
-c_int16_p = POINTER(c_int16)
-c_int32_p = POINTER(c_int32)
-c_int64_p = POINTER(c_int64)
-c_float_p = POINTER(c_float)
-c_double_p = POINTER(c_double)
 
 import llvm.core as llc
 from llvm.core import Type as lltype  
-
- 
 
 ty_void = lltype.void()
 ty_int8 = lltype.int(8)
@@ -105,6 +93,17 @@ def is_llvm_int_type(t):
 
 def is_llvm_ptr_type(t):
   return t.kind == llc.TYPE_POINTER
+
+from ctypes import c_int8, c_int16, c_int32, c_int64
+from ctypes import c_float, c_double
+from ctypes import CFUNCTYPE, POINTER
+
+c_int8_p = POINTER(c_int8)
+c_int16_p = POINTER(c_int16)
+c_int32_p = POINTER(c_int32)
+c_int64_p = POINTER(c_int64)
+c_float_p = POINTER(c_float)
+c_double_p = POINTER(c_double)
 
 llvm_to_ctypes_mapping = {
   str(ty_void) : None, 

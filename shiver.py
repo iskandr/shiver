@@ -10,8 +10,10 @@ from llvm.core import *
 import llvm.passes 
 
 from llvm_helpers import * 
-import llvm_helpers
+
 import value_helpers 
+from type_helpers import is_llvm_float_type, is_llvm_int_type, is_llvm_ptr_type
+from type_helpers import lltype_to_dtype, ty_int8
 
 
 def safediv(x,y):
@@ -97,6 +99,36 @@ def split_iters(iter_ranges, n_threads = None):
   
           
 
+def gv_from_python(x, llvm_type = None):
+  if isinstance(x, GenericValue):
+    return x
+  elif isinstance(x, (int,long)):
+    llvm_type =  ty_int64 if llvm_type is None else llvm_type
+    assert is_llvm_int_type(llvm_type), \
+      "Expected LLVM integer type, not %s" % (llvm_type,) 
+    return GenericValue.int(llvm_type, x)
+  elif isinstance(x, float):
+    llvm_type = ty_float64 if llvm_type is None else llvm_type
+    assert is_llvm_float_type(llvm_type), \
+        "Expected LLVM float type, not %s" % (llvm_type,)
+    return GenericValue.real(llvm_type, x)  
+  elif isinstance(x, bool):
+    llvm_type = ty_int8 if llvm_type is None else llvm_type
+    assert is_llvm_int_type(llvm_type), \
+      "Expected LLVM integer type, not %s" % (llvm_type,)
+    return GenericValue.int(llvm_type, x)
+  else:
+    assert isinstance(x, np.ndarray)
+    assert llvm_type is not None 
+    assert is_llvm_ptr_type(llvm_type), \
+      "Native argument receiving numpy array must be a pointer, not %s" % (llvm_type,)
+    elt_type = llvm_type.pointee
+    assert is_llvm_float_type(elt_type) or is_llvm_int_type(elt_type)
+    dtype = lltype_to_dtype(elt_type) 
+    assert dtype == x.dtype, \
+        "Can't pass array with %s* data pointer to function that expects %s*" % (x.dtype, dtype)
+    return GenericValue.pointer(x.ctypes.data)
+  
 
 def run_with_generic_values(fn, gv_inputs, ee):  
   n_given = len(gv_inputs)
@@ -120,7 +152,7 @@ def run(fn, *input_values, **kwds):
   #ctypes_inputs = value_helpers.ctypes_values_from_python(input_values)
   #return fn_ptr(*ctypes_inputs)
   input_types = [arg.type for arg in fn.args]
-  gv_inputs = [value_helpers.gv_from_python(x, t) 
+  gv_inputs = [gv_from_python(x, t) 
                for (x,t) in 
                zip(input_values, input_types)]
   
@@ -137,8 +169,6 @@ class Worker(threading.Thread):
   
   
   def run(self):
-    print threading.current_thread().name, "started..." 
-    sys.stdout.flush()
     while True:
       try:
         ranges = self.q.get(False)
@@ -146,10 +176,10 @@ class Worker(threading.Thread):
         #starts = [from_python(r[0]) for r in ranges]
         #stops = [from_python(r[1]) for r in ranges]
         index_types = [arg.type for arg in self.llvm_fn.args[-len(ranges):]]
-        starts = [value_helpers.gv_from_python(r[0], t) 
+        starts = [gv_from_python(r[0], t) 
                   for (r,t) in 
                   zip(ranges, index_types)]
-        stops = [value_helpers.gv_from_python(r[1], t) 
+        stops = [gv_from_python(r[1], t) 
                   for (r,t) in 
                   zip(ranges, index_types)]        
         args = self.fixed_args + starts + stops
@@ -159,8 +189,6 @@ class Worker(threading.Thread):
         #args = [value_helpers.gv_from_python(x,t)]
         self.q.task_done()
       except Queue.Empty:
-        print threading.current_thread().name, "stopped..."
-        sys.stdout.flush()
         return
 
         
@@ -171,7 +199,7 @@ def parfor(fn, niters, fixed_args = (), ee = shared_exec_engine, _cache = {}):
     "Body of parfor loop must return void, not %s" % return_type(fn)
   
   # in case fixed arguments aren't yet GenericValues, convert them
-  fixed_args = tuple(value_helpers.gv_from_python(v, arg.type) 
+  fixed_args = tuple(gv_from_python(v, arg.type) 
                      for (v,arg) in 
                      zip(fixed_args, fn.args))
   iter_ranges = parse_iters(niters)
@@ -187,7 +215,7 @@ def parfor(fn, niters, fixed_args = (), ee = shared_exec_engine, _cache = {}):
     steps = [iter_range[2] for iter_range in iter_ranges]
     work_fn = mk_wrapper(fn, steps)
     optimize(work_fn)
-    print work_fn 
+ 
     _cache[cache_key] = work_fn
    
   q = Queue.Queue()

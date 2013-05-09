@@ -79,7 +79,9 @@ class LoopBuilder(object):
   def create(self, bb, builder, loop_idx_values = []):
     n = len(loop_idx_values)
     if n == self.n_loops:
-      builder.call(self.original_fn, self.closure_values + loop_idx_values)
+      
+      call = builder.call(self.original_fn, self.closure_values + loop_idx_values)
+      llvm.core.inline_function(call)
       return builder
     else:
       start = self.start_values[n]
@@ -156,9 +158,9 @@ _opt_passes = [
     'instcombine',
     'simplifycfg',
     'basiccg',
-    'inline', 
-    'functionattrs',
-    'argpromotion',
+    #'inline', 
+    #'functionattrs',
+    #'argpromotion',
     'memdep',
     'scalarrepl-ssa',
     'sroa',
@@ -205,20 +207,21 @@ def optimize(llvm_fn, n_iters = 3):
   #engine_builder.force_jit()
   #engine_builder.opt(3)
   tm = llvm.ee.TargetMachine.new(opt=3)
-  pm, _ = llvm.passes.build_pass_managers(tm, opt = 3,
-                                            loop_vectorize = True, 
+  _, fpm = llvm.passes.build_pass_managers(tm, opt = 3,
+                                            loop_vectorize = True,  
                                             mod = llvm_fn.module)
-   
+  
+
   #function_pass_manager = module_pass_manager.fpm
   #for p in _opt_passes:
   #  function_pass_manager.add(p)
   for p in _opt_passes:
-    pm.add(p)
+    fpm.add(p)
     #fpm.add(p)
   for _ in xrange(n_iters):
-    pm.run(llvm_fn.module)
-
-
+    fpm.run(llvm_fn)
+  
+  
 
 def get_fn_ptr(llvm_fn, ee = shared_exec_engine):
   FN_PTR_TYPE = lltype_to_ctype(llvm_fn.type.pointee)

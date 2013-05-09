@@ -62,7 +62,7 @@ def test_timing():
   x = np.arange(n, dtype=float)
   y = np.empty_like(x)
   src = "void add1_to_elt_float64(double* x, double* y, long i) { y[i] = x[i] + 1.0; }"
-  fn = llvm_helpers.from_c("add1_to_elt_float64", src)
+  fn = shiver.from_c("add1_to_elt_float64", src)
   
   import time 
   start_t1 = time.time()
