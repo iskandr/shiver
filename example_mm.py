@@ -22,10 +22,8 @@ def mm(x, y, output_elt_type = None):
   n = y.shape[1]
   assert d == y.shape[0]
   
- 
-  
   cache_key = (m,n,d,xt,yt,output_elt_type)
-  
+
   if cache_key in _compilation_cache:
     llvm_fn = _compilation_cache[cache_key]
   else:
@@ -51,7 +49,7 @@ def mm(x, y, output_elt_type = None):
        z[i*n + j] = total;
     """ % locals()
     src = "void %(name)s (%(args)s) { %(body)s }" % locals() 
-    print src 
+
     llvm_fn = shiver.from_c(name, src)
     _compilation_cache[cache_key] = llvm_fn
    
@@ -64,7 +62,7 @@ def mm(x, y, output_elt_type = None):
 
 import time 
 if __name__ == '__main__':
-  m, n, d = 2000,1000,200
+  m, n, d = 1000,1000,500
   x = np.random.randn(m,d)
   y = np.random.randn(d,n)
   
@@ -84,9 +82,6 @@ if __name__ == '__main__':
   z = mm(x, y)
   nocomp_time_end = time.time()
   print "Shiver (w/out compilation) time: %0.3f" % (nocomp_time_end - nocomp_time_start)
-  
-  
-  
   
   assert np.all( (z - expected) ** 2 < 0.00001)
   

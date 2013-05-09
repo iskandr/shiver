@@ -7,12 +7,12 @@ import threading
 
 from llvm.core import Function 
 from llvm.ee import GenericValue 
-from llvm_helpers import mk_wrapper, return_type, shared_exec_engine, optimize
+from llvm_helpers import return_type, shared_exec_engine, optimize
 from llvm_helpers import module_from_c, from_c  
-
 from type_helpers import is_llvm_float_type, is_llvm_int_type, is_llvm_ptr_type
 from type_helpers import lltype_to_dtype, ty_int8, ty_int64, ty_float64, ty_void  
-from type_helpers import dtype_to_ctype_name 
+from type_helpers import dtype_to_ctype_name, lltype_to_dtype
+from wrappers import parfor_wrapper #, parmap_wrapper 
 
 def safediv(x,y):
   return int(math.ceil(x / float(y)))
@@ -58,7 +58,10 @@ def parse_iters(niters):
   if isinstance(niters, int):
     niters = (niters,)
   assert isinstance(niters, (list, tuple))
-  return [parse_iter_range(x) for x in niters]
+  iter_ranges = [parse_iter_range(x) for x in niters]
+  counts = [(r[1] - r[0] / r[2]) for r in iter_ranges]
+  steps = [r[2] for r in iter_ranges]
+  return iter_ranges, tuple(steps), tuple(counts) 
 
 def smallest_divisor(n):
   for i in xrange(2,n):
@@ -78,11 +81,22 @@ def split_iters(iter_ranges, n_threads = None):
     n_threads = cpu_count()
   
   counts = [safediv(r[1] - r[0], r[2]) for r in iter_ranges]
-  largest_dim = np.max(counts)
+  # largest_dim = np.max(counts)
   total_count = float(np.sum(counts))
-  split_factors = [ (c / total_count) ** 3 for c in counts ]
-  n_pieces = min(2*n_threads, largest_dim)
-
+  split_factors = [ (c / total_count) ** 2 for c in counts ]
+  if len(counts) > 2:
+    # kludgy heuristic
+    # if you're reading across multiple dimensions
+    # assume there might be reuse of data read in 
+    # and try to split up work so it fits into cache  
+    expected_bytes = 8 
+    for dim in counts:
+      expected_bytes *= dim
+    expected_kb = expected_bytes / 1024
+    l2_cache_size = 8192
+    n_pieces = max(n_threads, expected_kb / l2_cache_size)
+  else: 
+    n_pieces = 2*n_threads 
   
   # initialize work_items with an empty single range 
   work_items = [[]]
@@ -106,7 +120,7 @@ def split_iters(iter_ranges, n_threads = None):
         new_work_item = [r for r in old_work_item]
         new_work_item.append(dim_work_item) 
         work_items.append(new_work_item)
- 
+
   return work_items 
   
           
@@ -191,46 +205,42 @@ class Worker(threading.Thread):
       except Queue.Empty:
         return
 
-        
-def parfor(fn, niters, fixed_args = (), ee = shared_exec_engine, _cache = {}):
-  assert isinstance(fn, Function), \
-    "Can only run LLVM functions, not %s" % type(fn)
-  assert return_type(fn) == ty_void, \
-    "Body of parfor loop must return void, not %s" % return_type(fn)
-  
-  # in case fixed arguments aren't yet GenericValues, convert them
-  fixed_args = tuple(gv_from_python(v, arg.type) 
-                     for (v,arg) in 
-                     zip(fixed_args, fn.args))
-  iter_ranges = parse_iters(niters)
-  n_fixed = len(fixed_args)
-  n_indices = len(iter_ranges)
-  cache_key = id(fn) 
-  if cache_key in _cache:
-    work_fn = _cache[cache_key] 
 
-  else: 
-    n_args = n_fixed + n_indices 
-    assert len(fn.args) == n_args
-    steps = [iter_range[2] for iter_range in iter_ranges]
-
-    work_fn = mk_wrapper(fn, steps)
-
-    optimize(work_fn)
- 
-    _cache[cache_key] = work_fn
-   
+def launch(work_fn, iter_ranges, fixed_args = (), ee = shared_exec_engine):
   q = Queue.Queue()
   # put all the index ranges into the queue
   for work_item in split_iters(iter_ranges):
     q.put(work_item)
   
-  
   # start worker threads
   for _ in xrange(cpu_count()):
     Worker(q, ee, work_fn, fixed_args).start()
   q.join()
+
+        
+def parfor(fn, niters, fixed_args = (), ee = shared_exec_engine):
+  """
+  Given a function from index integers to void, run it in parallel 
+  over the index range specified by the tuple 'niters'
+  """
+  assert isinstance(fn, Function), \
+    "Can only run LLVM functions, not %s" % type(fn)
   
+  # in case fixed arguments aren't yet GenericValues, convert them
+  fixed_args = tuple(gv_from_python(v, arg.type) 
+                     for (v,arg) in 
+                     zip(fixed_args, fn.args))
+  iter_ranges, steps, shape = parse_iters(niters)
+  result_lltype = return_type(fn) 
+  if result_lltype == ty_void:
+    work_fn = parfor_wrapper(fn, steps)
+    return launch(work_fn, iter_ranges, fixed_args, ee)
+  else:
+    assert is_llvm_float_type(result_lltype) or is_llvm_int_type(result_lltype)
+    dtype = lltype_to_dtype(result_lltype)
+    result_array = np.empty(shape = shape, dtype = dtype)
+    fixed_args = (result_array,) + fixed_args
+    assert False, "Collecting results not yet implemented"
+
   
-    
-  
+
