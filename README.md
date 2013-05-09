@@ -34,13 +34,11 @@ Example:
    shiver.parfor(fn1, niters=len(x), fixed_args = [x_gv])
    
    # Now we'll build a function which takes two indices which range 
-   # over all pairs of integers [1..5] and [1..2] and fills x with their products
-
+   # over all pairs of integers [0..9] and [0..20] and fills x with their products
    src = "float mult(long i, long j) { return (float) i*j; }" 
    fn2 = shiver.from_c("mult", src)
    result_grid = shiver.parfor(fn2, (10,20)
    assert result_grid.shape == (10,20)
-
 
 ```
 
