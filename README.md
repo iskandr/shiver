@@ -41,10 +41,7 @@ Example:
    result_grid = shiver.parfor(fn2, (10,20)
    assert result_grid.shape == (10,20)
 
-   # we can also specify more complex iteration spaces using slice objects
-   result_grid2 = shiver.parfor(fn2, (slice(0,100,10),slice(0,200,10)))
-   assert result_grid.shape == result_grid2.shape
-   assert (result_grid <= result_grid2).all()
+
 ```
 
 
