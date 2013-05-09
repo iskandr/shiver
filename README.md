@@ -3,36 +3,48 @@ Shiver
 *a shiver of sharks, biting and tearing, until all is consumed*
 
 A multi-threaded work queue for functions compiled with [llvmpy](http://http://www.llvmpy.org/). 
-Give *Shiver* a function whose last argument is an index (or multiple indices) and a description of the 
-iteration space (i.e. a integer number of iterations, multiple integers, or even slice objects with start/stop/step fields), 
+Give *Shiver* a function whose last argument is an index (or multiple indices) and an iteration space
+ (i.e. a number of iterations, a tuple of integers, or even slice objects with start/stop/step fields), 
 and shiver does all the messy plumbing of running your code in parallel. 
 
 Example:
 
 ```python
+
    # we're going to fill this array with the numbers [0...9]
    x = np.empty(10, dtype=int)
+
    # compile an LLVM function which takes a data point, and an index
-   fn_one_idx = shiver.from_c("void int(long *x, long i) { x[i] = i;}")   
+   fn1 = shiver.from_c("fn1", "void fn1(long *x, long i) { x[i] = i;}")   
+
    # run fn_one_idx in parallel;
    # - shiver will supply x's data pointer as a fixed argument to all threads 
    # - each worker thread will also get a subrange of the indices [0..9]
-   shiver.parfor(fn_one_idx, niters=len(x), fixed_args = [x])
-   
+   shiver.parfor(fn1, niters=len(x), fixed_args = [x])
+
+   # if the function you compile returns a value, 
+   # then shiver will collect those values into a result array 
+   ident = shiver.from_c("indentity", "long identity(long i) { return i; }")
+   y = shiver.parfor(ident, 10)
+   assert (y==x).all()
+    
    # let's do the same thing again, but here we'll explicitly convert the 
    # fixed array argument to a type LLVM understands 
    x_gv = GenericValue.pointer(x.ctypes.data)
-   shiver.parfor(fn_one_idx, niters=len(x), fixed_args = [x_gv])
+   shiver.parfor(fn1, niters=len(x), fixed_args = [x_gv])
    
    # Now we'll build a function which takes two indices which range 
    # over all pairs of integers [1..5] and [1..2] and fills x with their products
-   src = "void int(long* x, long i, long j) { x[(j-1)*5 + i-1] = i*j;}" 
-   fn_two_idxs = shiver.from_c(src)
 
-   # notice that we're passing in slices instead of just an integer; 
-   # they're not actually being used to slice into an array but rather 
-   # to indicate the start/stop/step values of the parallel loop nests
-   shiver.parfor(fn_two_idxs, niters = (slice(1,6), slice(1,3)), fixed_args =[x])
+   src = "float int(long i, long j) { return float(i*j); }" 
+   fn2 = shiver.from_c(src)
+   result_grid = shiver.parfor(fn2, (10,20)
+   assert result_grid.shape == (10,20)
+
+   # we can also specify more complex iteration spaces using slice objects
+   result_grid2 = shiver.parfor(fn2, (slice(0,100,10),slice(0,200,10)))
+   assert result_grid.shape == result_grid2.shape
+   assert (result_grid <= result_grid2).all()
 ```
 
 
