@@ -234,13 +234,18 @@ def parfor(fn, niters, fixed_args = (), ee = shared_exec_engine):
   result_lltype = return_type(fn) 
   if result_lltype == ty_void:
     work_fn = parfor_wrapper(fn, steps)
-    return launch(work_fn, iter_ranges, fixed_args, ee)
+    launch(work_fn, iter_ranges, fixed_args, ee)
+    return 
   else:
     assert is_llvm_float_type(result_lltype) or is_llvm_int_type(result_lltype)
     dtype = lltype_to_dtype(result_lltype)
     result_array = np.empty(shape = shape, dtype = dtype)
-    fixed_args = (result_array,) + fixed_args
+    fixed_args = (GenericValue.pointer(result_array.ctypes.data),) + fixed_args
+    work_fn = parfor_wrapper(fn, steps, shape)
+    assert len(fixed_args) + 2*len(steps) == len(work_fn.args)
+    launch(work_fn, iter_ranges, fixed_args, ee)
+    return result_array
     assert False, "Collecting results not yet implemented"
-
+  
   
 

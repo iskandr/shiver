@@ -34,17 +34,30 @@ def test_add1_from_c():
 
 
 
-add1_src = "void add1_to_elt_int32(int* x, int* y, long i) { y[i] = x[i] + 1; }"
-add1_to_elt_int32 = llvm_helpers.from_c("add1_to_elt_int32", add1_src)
+add1_explicit_output_int32_src = "void add1(int* x, int* y, long i) { y[i] = x[i] + 1; }"
+add1_explicit_output_int32 = llvm_helpers.from_c("add1", add1_explicit_output_int32_src)
 
-def test_add1_arrays():
+def test_add1_explicit_output():
   n = 12    
   x = np.arange(n, dtype= np.int32)
   y = np.empty_like(x)
-  shiver.parfor(add1_to_elt_int32, n, fixed_args = (x, y))
+  shiver.parfor(add1_explicit_output_int32, n, fixed_args = (x, y))
   expected = x + 1
   assert y.shape == expected.shape
   assert all(y == expected), "Expected %s but got %s" % (expected, y)
+
+add1_implicit_output_double_src = "double add1(double* x, long i) { return x[i] + 1.0; }"
+add1_implicit_output_double = llvm_helpers.from_c("add1", add1_implicit_output_double_src)
+
+def test_add1_implicit_output():
+  n = 12    
+  x = np.arange(n, dtype= np.float64)
+
+  y = shiver.parfor(add1_implicit_output_double, n, fixed_args = (x,))
+  expected = x + 1
+  assert y.shape == expected.shape
+  assert all(y == expected), "Expected %s but got %s" % (expected, y)
+  
 
 def test_input_type_error():
   n = 12 

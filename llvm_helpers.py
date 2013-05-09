@@ -17,7 +17,12 @@ shared_exec_engine = llvm.ee.ExecutionEngine.new(shared_module)
 
 def return_type(fn):
   return fn.type.pointee.return_type 
- 
+
+def input_types(fn):
+  return [arg.type for arg in fn.args]  
+
+def input_names(fn):
+  return [arg.name for arg in fn.args]
 
 def const_int(x, t = ty_int64):
   return Constant.int(t, x)
@@ -71,10 +76,16 @@ def module_from_c(src, name = 'fn', compiler = 'clang', print_llvm = False):
     module = Module.from_bitcode(open(bitcode_filename))
   return module 
 
-def from_c(name, src, compiler = "clang", print_llvm = False):
+_save_modules = []
+def from_c(name, src, compiler = "clang", print_llvm = False, link = False):
   module = module_from_c(src, name, compiler, print_llvm)
-  shared_module.link_in(module)
-  return shared_module.get_function_named(name)
+  if link:
+    shared_module.link_in(module)
+  else:
+    # prevent the module from being deleted 
+    # which then invalidates the returned function 
+    _save_modules.append(module)
+  return module.get_function_named(name)
 
 
 

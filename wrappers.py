@@ -2,22 +2,22 @@
 from llvm.core import *  
 
 from llvm_helpers import const_float, const_int, empty_fn, shared_module, optimize
-from type_helpers import ty_pyobj, ty_ptr_pyobj, ty_void 
+from llvm_helpers import return_type, input_types, input_names 
+from type_helpers import ty_pyobj, ty_ptr_pyobj, ty_void , ty_int64
+from type_helpers import is_llvm_float_type, is_llvm_int_type
 
-PyEval_InitThreads = \
-  shared_module.add_function(Type.function(ty_void, []), "PyEval_InitThreads")
-PyEval_SaveThread = \
-  shared_module.add_function(Type.function(ty_ptr_pyobj, []), "PyEval_SaveThread")
-PyEval_RestoreThread = \
-  shared_module.add_function(Type.function(ty_void, [ty_ptr_pyobj]), "PyEval_RestoreThread")
+def libfn(name, return_type, input_types):
+  def get_ref(module = shared_module):
+    t = Type.function(return_type, input_types)
+    return module.get_or_insert_function(t, name)
+  return get_ref 
 
-PyThreadState_Swap = \
-  shared_module.add_function(Type.function(ty_ptr_pyobj, [ty_ptr_pyobj]), "PyThreadState_Swap")
-
-PyEval_ReleaseLock = \
-  shared_module.add_function(Type.function(ty_void, []), "PyEval_ReleaseLock")
-PyEval_AcquireLock = \
-  shared_module.add_function(Type.function(ty_void, []), "PyEval_AcquireLock")
+PyEval_InitThreads = libfn("PyEval_InitThreads", ty_void, [])
+PyEval_SaveThread = libfn("PyEval_SaveThread", ty_ptr_pyobj, [])
+PyEval_RestoreThread = libfn("PyEval_RestoreThread", ty_void, [ty_ptr_pyobj])
+PyThreadState_Swap = libfn("PyThreadState_Swap", ty_ptr_pyobj, [ty_ptr_pyobj])
+PyEval_ReleaseLock = libfn ("PyEval_ReleaseLock", ty_void, [])
+PyEval_AcquireLock = libfn ("PyEval_AcquireLock", ty_void, [])
 
 
 class LoopBuilder(object):
@@ -84,7 +84,7 @@ class LoopBuilder(object):
       return after_builder 
 
   
-def mk_parfor_wrapper(fn, step_sizes):
+def mk_parfor_wrapper_no_return(fn, step_sizes):
   n_indices = len(step_sizes)
 
   # need to double the integer index inputs to allow for a stop argument 
@@ -122,13 +122,13 @@ def mk_parfor_wrapper(fn, step_sizes):
   
   null = llvm.core.Constant.null(ty_ptr_pyobj)
   
-  thread_state = entry_builder.call(PyThreadState_Swap, [null], 'thread_state')
-  entry_builder.call(PyEval_ReleaseLock, [])
+  thread_state = entry_builder.call(PyThreadState_Swap(fn.module), [null], 'thread_state')
+  entry_builder.call(PyEval_ReleaseLock(fn.module), [])
   
   exit_builder = loop_builder.create(entry_bb, entry_builder)
   
-  exit_builder.call(PyEval_AcquireLock, [])
-  exit_builder.call(PyThreadState_Swap, [thread_state])
+  exit_builder.call(PyEval_AcquireLock(fn.module), [])
+  exit_builder.call(PyThreadState_Swap(fn.module), [thread_state])
   exit_builder.ret_void()
   
   # have to inline the call to the user function after the wrapper
@@ -137,15 +137,52 @@ def mk_parfor_wrapper(fn, step_sizes):
   loop_builder.inline_inner_call()
   return wrapper 
 
-def parfor_wrapper(fn, step_sizes, _cache = {}):
+def mk_parfor_wrapper_collect_returned_values(fn, step_sizes, dim_sizes, result_t):
+  
+  write_output_fn = empty_fn("write_output_%s" % fn.name, 
+                     [Type.pointer(result_t)] + input_types(fn), 
+                     output_type=ty_void, 
+                     module = fn.module)
+   
+  original_args = write_output_fn.args[1:]
+  bb = write_output_fn.append_basic_block("entry")
+  builder = Builder.new(bb)
+  value = builder.call(fn, original_args, "elt_result")
+  
+  n_indices = len(step_sizes)
+  idx_args = write_output_fn.args[-n_indices:]
+  strides = [1]
+  for dim_size in reversed(dim_sizes[1:]):
+    strides.append(strides[-1] * dim_size)
+  strides.reverse()
+  output_idx = const_int(0, ty_int64)
+  for (idx, stride) in zip(idx_args, strides):
+    dim_offset = builder.mul(idx, const_int(stride, idx.type))
+    output_idx = builder.add(output_idx, dim_offset)
+  output_array = write_output_fn.args[0]
+  output_ptr = builder.gep(output_array, [output_idx])
+  builder.store(value, output_ptr)
+  builder.ret_void()
+  llvm.core.inline_function(value)
+  return mk_parfor_wrapper_no_return(write_output_fn, step_sizes)
+   
+
+def parfor_wrapper(fn, step_sizes, dim_sizes = None, _cache = {}):
   cache_key = id(fn), tuple(step_sizes) 
   if cache_key in _cache:
     return _cache[cache_key]
   else:
-    wrapper = mk_parfor_wrapper(fn, step_sizes)
+    result_t = fn.type.pointee.return_type 
+    if result_t == ty_void:
+      wrapper = mk_parfor_wrapper_no_return(fn, step_sizes)
+    else:
+      assert is_llvm_float_type(result_t) or is_llvm_int_type(result_t), \
+         "Function can't return type %s" % result_t
+      assert dim_sizes is not None 
+      wrapper = mk_parfor_wrapper_collect_returned_values(fn, step_sizes, dim_sizes, result_t)
     optimize(wrapper)
     _cache[cache_key] = wrapper 
-    print wrapper 
+
     return wrapper 
   
   
