@@ -15,7 +15,7 @@ Example:
    x = np.empty(10, dtype=int)
 
    # compile an LLVM function which takes an array, and an index
-   fn1 = shiver.from_c("fn1", "void fn1(long *x, long i) { x[i] = i;}")   
+   fn1 = shiver.from_c("void fn1(long *x, long i) { x[i] = i;}")   
 
    # run fn_one_idx in parallel;
    # - shiver will supply x's data pointer as a fixed argument to all threads 
@@ -25,7 +25,7 @@ Example:
 
    # if the function you compile returns a value, 
    # then shiver will collect those values into a result array 
-   ident = shiver.from_c("indentity", "long identity(long i) { return i; }")
+   ident = shiver.from_c("long identity(long i) { return i; }")
    y = shiver.parfor(ident, 10)
    assert (y==x).all()
     
@@ -36,8 +36,7 @@ Example:
    
    # Now we'll build a function which takes two indices which range 
    # over all pairs of integers [0..9] and [0..20] and fills x with their products
-   src = "float mult(long i, long j) { return (float) i*j; }" 
-   fn2 = shiver.from_c("mult", src)
+   fn2 = shiver.from_c("float mult(long i, long j) { return (float) i*j; }")
    result_grid = shiver.parfor(fn2, (10,20)
    assert result_grid.shape == (10,20)
 

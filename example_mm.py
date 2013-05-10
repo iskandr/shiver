@@ -48,7 +48,7 @@ def mm(x, y, output_elt_type = None):
       }
     """ % locals()
 
-    llvm_fn = shiver.from_c(name, src)
+    llvm_fn = shiver.from_c(src)
     _compilation_cache[cache_key] = llvm_fn
    
   if not x.flags.c_contiguous: x = x.copy()

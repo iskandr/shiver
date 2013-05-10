@@ -10,6 +10,7 @@ ty_int16 = lltype.int(16)
 ty_int32 = lltype.int(32) 
 ty_int64 = lltype.int(64) 
 
+
 ty_float32 = lltype.float()
 ty_float64 = lltype.double()
 
@@ -31,9 +32,15 @@ python_to_lltype_mappings = {
   np.int64 : ty_int64, 
   np.float32 : ty_float32, 
   np.float64 : ty_float64,
+  
   int : ty_int64, 
   float : ty_float64, 
   bool : ty_int8, 
+  
+  np.uint8 : ty_int8,             
+  np.uint16 : ty_int16, 
+  np.uint32 : ty_int32, 
+  np.uint64 : ty_int64,
 }
 
 def python_to_lltype(t):

@@ -57,7 +57,8 @@ def empty_fn( name, input_types, output_type = ty_void, module = shared_module):
   return fn  
 
 
-def module_from_c(src, name = 'fn', compiler = 'clang', print_llvm = False):
+def module_from_c(src, name = None, compiler = 'clang', print_llvm = False):
+  if name is None: name = "module"
   src_filename = tempfile.mktemp(prefix = name + "_src_", suffix = '.c')
 
   f = open(src_filename, 'w')
@@ -77,8 +78,11 @@ def module_from_c(src, name = 'fn', compiler = 'clang', print_llvm = False):
   return module 
 
 _save_modules = []
-def from_c(name, src, compiler = "clang", print_llvm = False, link = False):
+def from_c(src, name = None, compiler = "clang", print_llvm = False, link = False):
   module = module_from_c(src, name, compiler, print_llvm)
+  if name is None: 
+    assert len(module.functions) == 1, "Must provide name of function to return"
+    name = module.functions[0].name   
   if link:
     shared_module.link_in(module)
   else:
@@ -149,8 +153,6 @@ _opt_passes = [
 def optimize(llvm_fn, n_iters = 3):
 
   tm = llvm.ee.TargetMachine.new(opt=3)
-  
-  
   early_cleanup = llvm.passes.build_pass_managers(tm, opt = 1, loop_vectorize=False, mod = llvm_fn.module).fpm
   for p in   ['targetlibinfo', 
               'no-aa', 
@@ -169,8 +171,6 @@ def optimize(llvm_fn, n_iters = 3):
   early_cleanup.run(llvm_fn)
 
   _, fpm = llvm.passes.build_pass_managers(tm, opt = 3, loop_vectorize = True, mod = llvm_fn.module) 
- 
-
   for p in _opt_passes:
     fpm.add(p)
 

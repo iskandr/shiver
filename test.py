@@ -26,7 +26,7 @@ def test_return_type_causes_failure():
     pass 
 
 def test_add1_from_c():
-  add1 = llvm_helpers.from_c("add1", "int add1(int x) { return x + 1;}");
+  add1 = llvm_helpers.from_c("int add1(int x) { return x + 1;}");
   x = 1
   res = shiver.run(add1, x)
   y = res.as_int()
@@ -35,7 +35,7 @@ def test_add1_from_c():
 
 
 add1_explicit_output_int32_src = "void add1(int* x, int* y, long i) { y[i] = x[i] + 1; }"
-add1_explicit_output_int32 = llvm_helpers.from_c("add1", add1_explicit_output_int32_src)
+add1_explicit_output_int32 = llvm_helpers.from_c(add1_explicit_output_int32_src)
 
 def test_add1_explicit_output():
   n = 12    
@@ -47,7 +47,7 @@ def test_add1_explicit_output():
   assert all(y == expected), "Expected %s but got %s" % (expected, y)
 
 add1_implicit_output_double_src = "double add1(double* x, long i) { return x[i] + 1.0; }"
-add1_implicit_output_double = llvm_helpers.from_c("add1", add1_implicit_output_double_src)
+add1_implicit_output_double = llvm_helpers.from_c(add1_implicit_output_double_src)
 
 def test_add1_implicit_output():
   n = 12    
@@ -75,7 +75,7 @@ def test_timing():
   x = np.arange(n, dtype=float)
   y = np.empty_like(x)
   src = "void add1_to_elt_float64(double* x, double* y, long i) { y[i] = x[i] + 1.0; }"
-  fn = shiver.from_c("add1_to_elt_float64", src)
+  fn = shiver.from_c(src)
   
   import time 
   start_t1 = time.time()
