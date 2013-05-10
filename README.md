@@ -14,12 +14,13 @@ Example:
    # we're going to fill this array with the numbers [0...9]
    x = np.empty(10, dtype=int)
 
-   # compile an LLVM function which takes a data point, and an index
+   # compile an LLVM function which takes an array, and an index
    fn1 = shiver.from_c("fn1", "void fn1(long *x, long i) { x[i] = i;}")   
 
    # run fn_one_idx in parallel;
    # - shiver will supply x's data pointer as a fixed argument to all threads 
    # - each worker thread will also get a subrange of the indices [0..9]
+   # - the numpy array 'x' will be passed in as the underlying pointer x.ctypes.data 
    shiver.parfor(fn1, niters=len(x), fixed_args = [x])
 
    # if the function you compile returns a value, 
