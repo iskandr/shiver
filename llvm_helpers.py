@@ -115,21 +115,25 @@ _opt_passes = [
     'domtree',
     'mem2reg',
     'scev-aa',
+    
     'loops',
     'loop-simplify',
     'lcssa',
     'loop-rotate',
+
     'licm',
     'lcssa',
     'loop-unswitch',
     'instcombine',
     'scalar-evolution',
-    'loop-simplify',
     'lcssa',
     'indvars',
+    
     'loop-idiom',
     'loop-deletion',
     'loop-unroll',
+
+   
     'memdep',
     'gvn',
     'memdep',
@@ -142,32 +146,36 @@ _opt_passes = [
   ]
 
 
-def optimize(llvm_fn, n_iters = 4, module_opts = False):
+def optimize(llvm_fn, n_iters = 3):
 
   tm = llvm.ee.TargetMachine.new(opt=3)
-  pm, fpm = llvm.passes.build_pass_managers(tm, opt = 3,
-                                            loop_vectorize = True,  
-                                            mod = llvm_fn.module)
   
   
-  if module_opts: 
-    for p in ['functionattrs', 
-              'argpromotion', 
-              'inline', 
+  early_cleanup = llvm.passes.build_pass_managers(tm, opt = 1, loop_vectorize=False, mod = llvm_fn.module).fpm
+  for p in   ['targetlibinfo', 
+              'no-aa', 
+              'basicaa', 
               'memdep', 
-              'loop-unroll']:  
-      pm.add(p)
-    
-    pm.run(llvm_fn.module)
-    pm.run(llvm_fn.module)
+              'tbaa', 
+              'instcombine', 
+              'simplifycfg', 
+              'basiccg', 
+              'verify', 
+              'mem2reg',
+              'dse', 
+              'adce']:
+    early_cleanup.add(p)
   
+  early_cleanup.run(llvm_fn)
+
+  _, fpm = llvm.passes.build_pass_managers(tm, opt = 3, loop_vectorize = True, mod = llvm_fn.module) 
+ 
+
   for p in _opt_passes:
     fpm.add(p)
 
   for _ in xrange(n_iters):
     fpm.run(llvm_fn)
-
-
 def get_fn_ptr(llvm_fn, ee = shared_exec_engine):
   FN_PTR_TYPE = lltype_to_ctype(llvm_fn.type.pointee)
   fn_addr = ee.get_pointer_to_function(llvm_fn)

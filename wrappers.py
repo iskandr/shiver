@@ -146,7 +146,10 @@ def mk_parfor_wrapper_collect_returned_values(fn, step_sizes, dim_sizes, result_
                      [Type.pointer(result_t)] + input_types(fn), 
                      output_type=ty_void, 
                      module = fn.module)
-   
+  output_array = write_output_fn.args[0]
+  output_array.add_attribute(llvm.core.ATTR_NO_ALIAS)
+  output_array.add_attribute(llvm.core.ATTR_NO_CAPTURE)
+  
   original_args = write_output_fn.args[1:]
   bb = write_output_fn.append_basic_block("entry")
   builder = Builder.new(bb)
@@ -162,7 +165,9 @@ def mk_parfor_wrapper_collect_returned_values(fn, step_sizes, dim_sizes, result_
   for (idx, stride) in zip(idx_args, strides):
     dim_offset = builder.mul(idx, const_int(stride, idx.type))
     output_idx = builder.add(output_idx, dim_offset)
-  output_array = write_output_fn.args[0]
+  
+
+
   output_ptr = builder.gep(output_array, [output_idx])
   builder.store(value, output_ptr)
   builder.ret_void()
@@ -185,7 +190,7 @@ def parfor_wrapper(fn, step_sizes, dim_sizes = None, _cache = {}):
       wrapper = mk_parfor_wrapper_collect_returned_values(fn, step_sizes, dim_sizes, result_t)
     optimize(wrapper)
     _cache[cache_key] = wrapper 
-
+    print wrapper 
     return wrapper 
   
   

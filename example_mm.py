@@ -31,12 +31,12 @@ def mm(x, y, output_elt_type = None):
     args = "%(xt)s* x, %(yt)s* y, long i, long j" % locals()
     src = """
       %(zt)s %(name)s (%(args)s) {     
-        int m = %(m)d; 
-        int n = %(n)d; 
-        int d = %(d)d; 
+        long m = %(m)d; 
+        long n = %(n)d; 
+        long d = %(d)d; 
         %(zt)s total = 0;
         
-        for (int k = 0; k < d; ++k) { 
+        for (long k = 0; k < d; ++k) { 
           // assume row-major indexing on 
           // both input arrays, which should 
           // be ensured by the calling code 
@@ -47,7 +47,7 @@ def mm(x, y, output_elt_type = None):
         return total;
       }
     """ % locals()
-    print src 
+
     llvm_fn = shiver.from_c(name, src)
     _compilation_cache[cache_key] = llvm_fn
    
