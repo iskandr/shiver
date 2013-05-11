@@ -81,7 +81,8 @@ _save_modules = []
 def from_c(src, name = None, compiler = "clang", print_llvm = False, link = False):
   module = module_from_c(src, name, compiler, print_llvm)
   if name is None: 
-    assert len(module.functions) == 1, "Must provide name of function to return"
+    names = [fn.name for fn in module.functions if not fn.is_declaration]
+    assert len(names) == 1, "Must provide name of function to return, candidates: %s" % (names,)
     name = module.functions[0].name   
   if link:
     shared_module.link_in(module)

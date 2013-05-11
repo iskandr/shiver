@@ -11,7 +11,7 @@ from llvm_helpers import return_type, shared_exec_engine, optimize
 from llvm_helpers import module_from_c, from_c  
 from type_helpers import is_llvm_float_type, is_llvm_int_type, is_llvm_ptr_type
 from type_helpers import lltype_to_dtype, ty_int8, ty_int64, ty_float64, ty_void  
-from type_helpers import dtype_to_ctype_name, lltype_to_dtype
+from type_helpers import dtype_to_ctype_name, lltype_to_dtype, python_to_lltype
 from wrappers import parfor_wrapper #, parmap_wrapper 
 
 def safediv(x,y):
@@ -150,8 +150,7 @@ def gv_from_python(x, llvm_type = None):
       "Native argument receiving numpy array must be a pointer, not %s" % (llvm_type,)
     elt_type = llvm_type.pointee
     assert is_llvm_float_type(elt_type) or is_llvm_int_type(elt_type)
-    dtype = lltype_to_dtype(elt_type) 
-    assert dtype == x.dtype, \
+    assert elt_type == python_to_lltype(x.dtype), \
         "Can't pass array with %s* data pointer to function that expects %s*" % (x.dtype, dtype)
     return GenericValue.pointer(x.ctypes.data)
   
@@ -242,7 +241,10 @@ def parfor(fn, niters, fixed_args = (), ee = shared_exec_engine):
     result_array = np.empty(shape = shape, dtype = dtype)
     fixed_args = (GenericValue.pointer(result_array.ctypes.data),) + fixed_args
     work_fn = parfor_wrapper(fn, steps, shape)
-    assert len(fixed_args) + 2*len(steps) == len(work_fn.args)
+    n_given = len(fixed_args) + 2*len(steps)
+    n_expected = len(work_fn.args)
+    assert n_given == n_expected, \
+       "Work function expects %d arguments but got %d" % (n_expected, n_given)
     launch(work_fn, iter_ranges, fixed_args, ee)
     return result_array
     assert False, "Collecting results not yet implemented"
