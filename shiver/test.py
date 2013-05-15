@@ -61,14 +61,18 @@ def test_add1_implicit_output():
 
 def test_input_type_error():
   n = 12 
-  x = np.arange(n, dtype= np.int64)
-  y = np.empty_like(x)
-  # function expects int32* so call should fail 
-  try: 
-    shiver.parfor(add1_to_elt_int32, n, fixed_args = (x, y))
+  
+  x_int = np.empty(shape=(n,), dtype='int64')
+  x_float = np.empty(shape=(n,), dtype='float64' )
+  fn = shiver.from_c("void f(double* x, int i) { x[i] = i; }")
+  # this should work  
+  shiver.parfor(fn, n, (x_float,))
+  try:
+    #this should fail
+    shiver.parfor(fn, n, fixed_args = (x_int)) 
   except:
     return  
-  assert False, "Shouldn't have succeeded due to int32*/int64* mismatch"
+  assert False, "Shouldn't have succeeded due to float64*/int64* mismatch"
 
 def test_timing():
   n = 10**8

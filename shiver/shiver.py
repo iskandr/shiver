@@ -12,7 +12,7 @@ from llvm_helpers import module_from_c, from_c
 from type_helpers import is_llvm_float_type, is_llvm_int_type, is_llvm_ptr_type
 from type_helpers import lltype_to_dtype, ty_int8, ty_int64, ty_float64, ty_void  
 from type_helpers import dtype_to_ctype_name, lltype_to_dtype, python_to_lltype
-from wrappers import parfor_wrapper #, parmap_wrapper 
+from wrappers import parfor_wrapper 
 
 def safediv(x,y):
   return int(math.ceil(x / float(y)))
@@ -151,7 +151,7 @@ def gv_from_python(x, llvm_type = None):
     elt_type = llvm_type.pointee
     assert is_llvm_float_type(elt_type) or is_llvm_int_type(elt_type)
     assert elt_type == python_to_lltype(x.dtype), \
-        "Can't pass array with %s* data pointer to function that expects %s*" % (x.dtype, dtype)
+        "Can't pass array with %s* data pointer to function that expects %s*" % (x.dtype, elt_type)
     return GenericValue.pointer(x.ctypes.data)
   
 

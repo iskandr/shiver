@@ -177,6 +177,7 @@ def optimize(llvm_fn, n_iters = 3):
 
   for _ in xrange(n_iters):
     fpm.run(llvm_fn)
+    
 def get_fn_ptr(llvm_fn, ee = shared_exec_engine):
   FN_PTR_TYPE = lltype_to_ctype(llvm_fn.type.pointee)
   fn_addr = ee.get_pointer_to_function(llvm_fn)
