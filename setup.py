@@ -30,7 +30,6 @@ A multi-threaded work queue for functions compiled with llvmpy. Give Shiver a fu
     license="BSD",
     version="0.11",
     url="http://github.com/iskandr/shiver",
-    # scripts = ['scripts/cloudp'],
     packages=[ 'shiver' ],
     package_dir={ '' : '.' },
     requires=[

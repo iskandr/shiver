@@ -190,7 +190,6 @@ def parfor_wrapper(fn, step_sizes, dim_sizes = None, _cache = {}):
       wrapper = mk_parfor_wrapper_collect_returned_values(fn, step_sizes, dim_sizes, result_t)
     optimize(wrapper)
     _cache[cache_key] = wrapper 
-    print wrapper 
     return wrapper 
   
   
