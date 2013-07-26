@@ -28,7 +28,7 @@ A multi-threaded work queue for functions compiled with llvmpy. Give Shiver a fu
     author="Alex Rubinsteyn",
     author_email="alexr@cs.nyu.edu",
     license="BSD",
-    version="0.11",
+    version="0.12",
     url="http://github.com/iskandr/shiver",
     packages=[ 'shiver' ],
     package_dir={ '' : '.' },
